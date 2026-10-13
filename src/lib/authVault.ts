@@ -22,7 +22,12 @@ type VaultCommand =
   | {
       type: "request";
       path: string;
-      init: { method?: string; body?: string; headers?: Record<string, string> };
+      init: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+        origin?: string;
+      };
     };
 
 type VaultResponse =
@@ -92,7 +97,12 @@ export const authVault: AuthApi = {
   signOut: () => vaultCall<void>({ type: "signOut" }),
   request: <T>(
     path: string,
-    init: { method?: string; body?: string; headers?: Record<string, string> } = {},
+    init: {
+      method?: string;
+      body?: string;
+      headers?: Record<string, string>;
+      origin?: string;
+    } = {},
   ) => vaultCall<T>({ type: "request", path, init }),
   onSessionLost(listener) {
     lostListeners.add(listener);

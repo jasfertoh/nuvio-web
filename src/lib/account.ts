@@ -13,6 +13,8 @@ import type {
   WatchedItem,
 } from "../types";
 import { platform } from "../platform/index.ts";
+import { registerProxySigner } from "./proxySignature.ts";
+import { mediaProxyBase } from "./mediaProxy.ts";
 import {
   blobRawValue,
   blobStringPayload,
@@ -173,7 +175,7 @@ export async function signOut(): Promise<void> {
 
 async function secureAuthorized<T>(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit & { origin?: string } = {},
 ): Promise<T> {
   if (!activeSession) throw new Error("Sign in first.");
   const headers: Record<string, string> = {};
@@ -184,6 +186,31 @@ async function secureAuthorized<T>(
     method: init.method,
     body: typeof init.body === "string" ? init.body : undefined,
     headers,
+    origin: init.origin,
+  });
+}
+
+/**
+ * Ask the media proxy to sign a source URL, proving this session first.
+ *
+ * Goes through the auth worker like everything else that needs the token, and
+ * names the proxy's own address rather than letting the worker assume the
+ * backend's. The two are the same host only when one machine is doing both
+ * jobs; with the client pointed at a hosted account backend and the proxy at
+ * home they are not, and the request was landing on a server that does not
+ * serve it.
+ */
+registerProxySigner((url) => signMediaUrl(url));
+
+export async function signMediaUrl(
+  url: string,
+): Promise<{ exp: number; sig: string } | null> {
+  if (!activeSession) return null;
+  const proxy = mediaProxyBase();
+  return secureAuthorized<{ exp: number; sig: string }>("/media-transcode/sign", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+    origin: proxy || undefined,
   });
 }
 

@@ -24,7 +24,12 @@ type WorkerCommand =
       id: number;
       type: "request";
       path: string;
-      init: { method?: string; body?: string; headers?: Record<string, string> };
+      init: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+        origin?: string;
+      };
     };
 
 type TokenPayload = {
@@ -97,13 +102,57 @@ async function withAuthLock<T>(work: () => Promise<T>): Promise<T> {
   return work();
 }
 
+/**
+ * The one path outside the REST API this session's token may be sent to.
+ *
+ * The media proxy is served from the same host as the backend and needs to
+ * know a caller is signed in before it will sign a playback URL. It is named
+ * exactly rather than by prefix: the point of this guard is that the token
+ * goes to the API and nowhere else, and a widened prefix is how that stops
+ * being true.
+ */
+const SIGN_PATH = "/media-transcode/sign";
+
 function assertRestPath(path: string) {
   if (
-    !path.startsWith("/rest/v1/") ||
+    (!path.startsWith("/rest/v1/") && path !== SIGN_PATH) ||
     path.includes("\\") ||
     /[\r\n\0]/.test(path)
   )
     throw new Error("The requested backend path is not allowed.");
+}
+
+/**
+ * Where the signing request goes.
+ *
+ * Everything else goes to the account backend and only there. Signing is the
+ * exception because the endpoint belongs to the media proxy, and the proxy is
+ * only on the backend's host when one machine is doing both jobs - point the
+ * client at a hosted account backend and keep the proxy at home, and the two
+ * are different hosts. Sent to the backend regardless, it asks a server that
+ * does not serve that path, and the browser refuses the preflight.
+ *
+ * This is a widening of where the token is sent, so it is narrow on purpose:
+ * only for SIGN_PATH, only to an address that passes the same shape checks the
+ * backend's own address has to pass, and never as a prefix match.
+ */
+function signingTarget(
+  path: string,
+  origin: string | undefined,
+  current: BackendConfig,
+): BackendConfig {
+  if (path !== SIGN_PATH || !origin) return current;
+  const parsed = new URL(origin);
+  const local = ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  if (
+    (parsed.protocol !== "https:" && !(local && parsed.protocol === "http:")) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  )
+    throw new Error("The media proxy address is not one a token may be sent to.");
+  return { ...current, url: parsed.toString().replace(/\/+$/, "") };
 }
 
 function assertBackend(value: BackendConfig | null | undefined): BackendConfig {
@@ -238,16 +287,22 @@ async function refresh(): Promise<string> {
 
 async function authorizedRequest(
   path: string,
-  init: { method?: string; body?: string; headers?: Record<string, string> },
+  init: {
+    method?: string;
+    body?: string;
+    headers?: Record<string, string>;
+    origin?: string;
+  },
 ) {
   assertRestPath(path);
   const currentBackend = backend;
   const currentGeneration = generation;
   if (!currentBackend || !accessToken)
     throw new Error("Sign in first.");
+  const target = signingTarget(path, init.origin, currentBackend);
   try {
     return await fetchJson(
-      currentBackend,
+      target,
       path,
       init,
       accessToken,
@@ -259,7 +314,7 @@ async function authorizedRequest(
     if (currentGeneration !== generation)
       throw new Error("The Nuvio session changed while this request was running.");
     return fetchJson(
-      currentBackend,
+      target,
       path,
       init,
       refreshed,

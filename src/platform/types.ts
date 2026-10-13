@@ -65,10 +65,22 @@ export type AuthApi = {
   /** Resumes a stored session, rotating whatever credential persisted it. */
   restore(): Promise<Session>;
   signOut(): Promise<void>;
-  /** One authorized call against the account backend, made on our behalf. */
+  /**
+   * One authorized call against the account backend, made on our behalf.
+   *
+   * `origin` sends it to a different host instead. It exists for the media
+   * proxy's signing endpoint, which lives on the proxy rather than on the
+   * account backend whenever the two are not the same machine. The holder of
+   * the token decides whether to honour it.
+   */
   request<T>(
     path: string,
-    init?: { method?: string; body?: string; headers?: Record<string, string> },
+    init?: {
+      method?: string;
+      body?: string;
+      headers?: Record<string, string>;
+      origin?: string;
+    },
   ): Promise<T>;
   /**
    * Announces a session lost outside any call — the holder crashed. Returns an

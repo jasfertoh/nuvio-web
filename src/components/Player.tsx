@@ -1502,8 +1502,7 @@ export function Player({
       onExternalPlay(mode && mode !== "internal" ? mode : "copy", externalUrl, startPositionMs);
       return cleanup;
     }
-    // The spike's whole integration point. Everything the proxy needs is in
-    // the URL, so a proxied stream is an ordinary progressive source as far as
+    // Everything the proxy needs is in the URL, so a proxied stream is an ordinary progressive source as far as
     // this effect is concerned.
     const playbackUrl = proxiedPlaybackUrl(url);
     const proxied = playbackUrl !== url;
