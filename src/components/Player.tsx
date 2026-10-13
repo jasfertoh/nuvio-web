@@ -1502,8 +1502,8 @@ export function Player({
       onExternalPlay(mode && mode !== "internal" ? mode : "copy", externalUrl, startPositionMs);
       return cleanup;
     }
-    // Everything the proxy needs is in the URL, so a proxied stream is an ordinary progressive source as far as
-    // this effect is concerned.
+    // Everything the proxy needs is in the URL, so a proxied stream is an
+    // ordinary progressive source as far as this effect is concerned.
     const playbackUrl = proxiedPlaybackUrl(url);
     const proxied = playbackUrl !== url;
     // A proxied source is being made playable by the proxy, so what this
