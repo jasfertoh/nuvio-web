@@ -27,7 +27,7 @@ Everything runs on one Mac (the "Pro") in Docker, published through Cloudflare t
 | Branch | URL | Container | Local port | Built by |
 |---|---|---|---|---|
 | `modified` (the fork) | https://nuvio-web.jasfertoh.com | `nuvio-nuvio-web-1` | 8092 | `self-host/scripts/deploy-web.sh` |
-| `main` (vanilla upstream) | https://nuvio-upstream.jasfertoh.com | `nuvio-nuvio-web-upstream-1` | 8093 | `docker compose -f compose.yml -f compose.nuvio-web-upstream.yml up -d --build nuvio-web-upstream` (run in `self-host`) |
+| `main` (vanilla upstream) | https://nuvio-upstream.jasfertoh.com | `nuvio-nuvio-web-upstream-1` | 8093 | `docker compose -f compose.yml -f compose.nuvio-web-upstream.yml up -d --build nuvio-web-upstream` (run in `self-host`), **then** `NUVIO_WEB_PUBLIC_URL=https://nuvio-upstream.jasfertoh.com ./scripts/purge-web-cache.sh` or the edge keeps the old `sw.js` |
 | Backend (Supabase API) | https://backend.jasfertoh.com | Kong | 8091 | the stack |
 | Media proxy | `https://backend.jasfertoh.com/media-transcode/*` | `nuvio-media-proxy-1` | 8085 (internal) | `compose.media-proxy.yml` |
 
