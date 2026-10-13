@@ -63,6 +63,11 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(version),
       "import.meta.env.VITE_NUVIO_SUPABASE_URL": JSON.stringify(env.VITE_NUVIO_SUPABASE_URL || env.NUVIO_SUPABASE_URL || ""),
       "import.meta.env.VITE_NUVIO_SUPABASE_FALLBACK_URL": JSON.stringify(env.VITE_NUVIO_SUPABASE_FALLBACK_URL || env.NUVIO_SUPABASE_FALLBACK_URL || ""),
+      // The media proxy's own origin. Named separately from the backend's
+      // because the two are only the same host when one machine does both
+      // jobs; pointing the client at a hosted account backend must not send
+      // playback at a host with no proxy on it.
+      "import.meta.env.VITE_NUVIO_MEDIA_PROXY_URL": JSON.stringify(env.VITE_NUVIO_MEDIA_PROXY_URL || env.NUVIO_MEDIA_PROXY_URL || ""),
       "import.meta.env.VITE_NUVIO_SUPABASE_ANON_KEY": JSON.stringify(env.VITE_NUVIO_SUPABASE_ANON_KEY || env.NUVIO_SUPABASE_ANON_KEY || ""),
       // The episode-ratings service, for a client that can call it directly.
       // Unset — which is every ordinary web build — the Worker is used instead,

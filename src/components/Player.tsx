@@ -7,6 +7,7 @@ import {
   SolidPlay,
   SourceSwapIcon,
 } from "./PlaybackIcons";
+import { proxiedPlaybackUrl } from "../lib/mediaProxy.ts";
 import { automaticSkipSegment, nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
 import { nativePlayerPreferences } from "../lib/nativePlayerPreferences";
 import { startNativePlaybackSession } from "../lib/nativePlaybackSession";
@@ -1501,7 +1502,16 @@ export function Player({
       onExternalPlay(mode && mode !== "internal" ? mode : "copy", externalUrl, startPositionMs);
       return cleanup;
     }
-    const verdict = assessPlayback(url, sourceText);
+    // The spike's whole integration point. Everything the proxy needs is in
+    // the URL, so a proxied stream is an ordinary progressive source as far as
+    // this effect is concerned.
+    const playbackUrl = proxiedPlaybackUrl(url);
+    const proxied = playbackUrl !== url;
+    // A proxied source is being made playable by the proxy, so what this
+    // browser can decode of the original says nothing about it.
+    const verdict = proxied
+      ? { playable: true, audioRisk: false, reason: "" }
+      : assessPlayback(url, sourceText);
     /*
      * Chosen from the player menu, or forced with ?nativeMkv=1 for testing.
      *
@@ -1685,7 +1695,7 @@ export function Player({
       }
     }, 1200);
     if (isHls && element.canPlayType("application/vnd.apple.mpegurl")) {
-      element.src = url;
+      element.src = playbackUrl;
       element.load();
       element.play().catch(() => setStatus("Tap play to start"));
     } else if (isHls) {
@@ -1742,7 +1752,7 @@ export function Player({
         })
         .catch(fail);
     } else {
-      element.src = url;
+      element.src = playbackUrl;
       element.load();
       element.play().catch(() => setStatus("Tap play to start"));
     }
