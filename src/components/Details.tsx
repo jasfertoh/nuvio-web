@@ -1,3 +1,10 @@
+import {
+  DebridResolveError,
+  canResolveDebrid,
+  needsDebridResolve,
+  resolveDebridStream,
+} from "../lib/debridResolve";
+import type { ProviderCredentialRow } from "../lib/providerCredentials";
 import { selectAutoStream } from "../lib/playbackPolicy";
 import { Select } from "./Select";
 import { bingeGroupFor } from "../lib/bingeCache";
@@ -378,6 +385,7 @@ export function Details({
   playerSettings,
   streamBadgeSettings,
   debridRules,
+  providerCredentials,
   metaScreenSettings,
   onClose,
   onLibrary,
@@ -401,6 +409,8 @@ export function Details({
   streamBadgeSettings: StreamBadgeSettings;
   /** The synced Debrid rules, applied only where a shell can resolve them. */
   debridRules: DebridRules;
+  /** The account's provider keys; the Torbox one resolves torrent sources. */
+  providerCredentials: ProviderCredentialRow[];
   metaScreenSettings: MetaScreenSettings;
   onClose(): void;
   onLibrary(meta: Meta): void;
@@ -1014,6 +1024,40 @@ export function Details({
    * being renewed every time it is reused — otherwise "reuse for 24 hours"
    * would quietly mean "forever, as long as you keep watching".
    */
+  // Addons mostly return torrents: an infoHash and no url, so nothing the
+  // element can play. The media proxy resolves those through Torbox on click.
+  const [resolvingStream, setResolvingStream] = useState<Stream | null>(null);
+  // Gated on the key and the proxy being there, not on the synced
+  // `debrid_enabled` flag: that one defaults to off in a client that never
+  // set it, and a Torbox key is already a statement of intent.
+  const canResolve = (stream: Stream) =>
+    needsDebridResolve(stream) && canResolveDebrid(providerCredentials);
+
+  async function playSource(stream: Stream, video?: Video, player?: ExternalPlayerMode) {
+    if (!canResolve(stream)) {
+      playFresh(stream, video, player);
+      return;
+    }
+    setResolvingStream(stream);
+    setDownloadNote("Resolving with Torbox…");
+    try {
+      const url = await resolveDebridStream(stream, providerCredentials, {
+        season: video?.season,
+        episode: video?.episode,
+      });
+      setDownloadNote("");
+      playFresh({ ...stream, url }, video, player);
+    } catch (reason) {
+      setDownloadNote(
+        reason instanceof DebridResolveError
+          ? reason.message
+          : "Could not resolve this source.",
+      );
+    } finally {
+      setResolvingStream(null);
+    }
+  }
+
   function playFresh(stream: Stream, video?: Video, player?: ExternalPlayerMode) {
     saveStreamLink(reuseKey(video), stream);
     // The sheet has done its job, so it goes now rather than waiting behind the
@@ -1773,14 +1817,17 @@ export function Details({
                   >
                     <button
                       className="source-main"
-                      disabled={!stream.url && !stream.externalUrl}
+                      disabled={
+                        (!stream.url && !stream.externalUrl && !canResolve(stream)) ||
+                        resolvingStream !== null
+                      }
                       onClick={() => {
                         // A hold that opened the menu must not also play.
                         if (holdFired.current) {
                           holdFired.current = false;
                           return;
                         }
-                        playFresh(stream, sourceVideo, sheetPlayer);
+                        void playSource(stream, sourceVideo, sheetPlayer);
                       }}
                     >
                       <span>
@@ -1806,6 +1853,7 @@ export function Details({
                         <small>
                           {stream.addonName}
                           {(() => {
+                            if (canResolve(stream)) return " · Resolves with Torbox";
                             const target =
                               stream.url || stream.externalUrl || "";
                             const verdict = assessPlayback(

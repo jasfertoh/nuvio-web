@@ -2811,6 +2811,7 @@ export function App() {
           playerSettings={webSettings.player}
           streamBadgeSettings={webSettings.streamBadges}
           debridRules={debridRules}
+          providerCredentials={providerCredentials}
           metaScreenSettings={webSettings.metaScreen}
           watchIndex={watchIndex}
           initialVideoId={detailLaunch?.videoId}
