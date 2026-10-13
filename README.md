@@ -1,12 +1,15 @@
 # Nuvio Web PWA — `main` branch (vanilla upstream)
 
-> **Which branch is this?** `main` tracks [lucaboox/nuvio-web](https://github.com/lucaboox/nuvio-web) `main` and is served at https://nuvio-upstream.jasfertoh.com purely so it can be compared with the user's fork, `modified` (https://nuvio-web.jasfertoh.com). This README is written so a new session can pick the project up cold. **The original upstream README is preserved at the bottom.**
+> **Which branch is this?** `main` tracks [lucaboox/nuvio-web](https://github.com/lucaboox/nuvio-web) `main` and is served at https://nuvio-upstream.jasfertoh.com to be compared with the user's fork, `modified` (https://nuvio-web.jasfertoh.com). This README is written so a new session can pick the project up cold. **The original upstream README is preserved at the bottom.**
 
 ## What differs from upstream, and what does not
 
-- Code is upstream's, except for **one deliberate commit**: the sign-in screen was synced from `modified` (`src/components/AuthScreen.tsx` and the `.auth-card`/`.auth-logo` rules in `src/styles.css`). Do not add other changes here.
-- This build has **no media-proxy support**: `media-transcode` appears nowhere in its bundle, and it talks to whatever backend it was built with. Sources needing AC-3/TrueHD/HEVC handling, the decoder-refusal retry, the device subtitle size and the proxy sign flow exist only on `modified`. That absence is the point of the comparison, not a bug.
-- It has no `Dockerfile`, `deploy/Caddyfile` or `.dockerignore`; upstream ships none. The image is built from a self-contained Dockerfile in the `self-host` repo (`deploy/nuvio-web-upstream.Dockerfile`) that copies only source and writes Caddy's config inline, so this checkout stays clean. It deliberately takes no media-proxy build arg.
+- Code is upstream's plus two deliberate additions, nothing else:
+  1. The **sign-in screen** synced from `modified` (`src/components/AuthScreen.tsx` and the `.auth-card`/`.auth-logo` rules in `src/styles.css`).
+  2. The **media proxy client**, ported from `modified`: `src/lib/mediaProxy.ts`, `proxySignature.ts`, `proxyTracks.ts`, `debridResolve.ts`, `cachedHashes.ts`; the sign flow (`signMediaUrl` in `account.ts`, the `origin` option through `platform/types.ts`, `authVault.ts` and `workers/authWorker.ts`, which honours an origin for `/media-transcode/sign` only); the player hook-up (six lines in `Player.tsx` plus the `NUVIO_MEDIA_PROXY_URL` define in `vite.config.ts`); and tests.
+- **Not ported from the fork**: the decoder-refusal retry (`?reencode=1` after `MEDIA_ERR_DECODE`, because upstream's player handles element errors differently), the device subtitle size and stepper, the style rail, brightness, keyboard HUD, and every other player change. So on `main` a BluRay REMUX that VideoToolbox rejects will still fail where `modified` recovers.
+- Both clients talk to the same proxy (`https://backend.jasfertoh.com/media-transcode/*`) and the same backend.
+- It has no `Dockerfile`, `deploy/Caddyfile` or `.dockerignore`; upstream ships none. The image is built from a self-contained Dockerfile in the `self-host` repo (`deploy/nuvio-web-upstream.Dockerfile`) that copies only source and writes Caddy's config inline, so this checkout stays clean. It takes `NUVIO_MEDIA_PROXY_URL` as a build arg like the fork's image.
 - It is checked out as the git worktree `~/Github Repos/nuvio-web-main`, belonging to the repo at `~/Github Repos/nuvio-web`.
 
 ## How this project is deployed (read this first)
@@ -65,7 +68,7 @@ Build-time environment (read by Vite, baked into the bundle; put in `.env.local`
 |---|---|
 | `NUVIO_SUPABASE_URL` | Account backend URL |
 | `NUVIO_SUPABASE_ANON_KEY` | That backend's publishable key |
-| `NUVIO_MEDIA_PROXY_URL` | *(modified only)* media proxy origin; defaults to the backend URL, kept separate so pointing at another backend does not send playback at a host with no proxy |
+| `NUVIO_MEDIA_PROXY_URL` | media proxy origin; defaults to the backend URL, kept separate so pointing at another backend does not send playback at a host with no proxy |
 
 JSX gotcha: a bare `/* */` inside JSX is rendered as **text**; comments there must be `{/* */}`. `tsc` does not catch this. User-facing strings live in `src/locales/*.json`, never in components (see `TRANSLATING.md`).
 
@@ -75,7 +78,7 @@ Remotes: `origin` = `jasfertoh/nuvio-web` (the user's fork), `upstream` = `lucab
 
 | Branch | Purpose |
 |---|---|
-| `main` | Tracks `upstream/main` exactly, plus **one** deliberate commit: the sign-in screen is synced from `modified` (see below). Everything else must stay upstream's. |
+| `main` | Tracks `upstream/main`, plus deliberate commits only: the sign-in screen and the media proxy client, synced from `modified`, and the README. Everything else must stay upstream's. |
 | `modified` | The user's working fork, served at nuvio-web.jasfertoh.com. Contains all of upstream up to the last sync plus the fork's own work. |
 | `media-proxy-playback`, `upstream-cherry-pick` | Older names for the same tip as `modified`; safe to ignore. |
 | `proxy-on-upstream` | Spike proving the media-proxy port onto upstream's player is about six lines in `Player.tsx` (the other player features are the real cost). |
@@ -83,7 +86,7 @@ Remotes: `origin` = `jasfertoh/nuvio-web` (the user's fork), `upstream` = `lucab
 
 Syncing upstream into `modified`: `git fetch upstream`, dry-run with `git merge-tree --write-tree modified upstream/main`, resolve player conflicts in the fork's favour. About 91 upstream commits (as of 2026-10) remain unapplied to `modified`; earlier ones were cherry-picked as a dependent chain, so skipping one cascades.
 
-To refresh `main`: `git -C ../nuvio-web-main fetch upstream && git -C ../nuvio-web-main merge upstream/main`. The sign-in commit means this is a merge, not a fast-forward; the README and `AuthScreen.tsx`/`styles.css` auth rules may conflict and should keep the fork's versions.
+To refresh `main`: `git -C ../nuvio-web-main fetch upstream && git -C ../nuvio-web-main merge upstream/main`. The extra commits mean this is a merge, not a fast-forward; `README.md`, `AuthScreen.tsx`, the auth rules in `styles.css` and the proxy files may conflict and should keep this branch's versions.
 
 ## The sign-in screen
 
