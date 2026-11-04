@@ -1122,6 +1122,8 @@ export type AddonSubtitle = {
   release?: string;
   /** OpenSubtitles matched it to the file by hash. */
   hashMatch?: boolean;
+  /** The frame rate it was timed at, where the addon says (fpsMilli). */
+  fps?: number;
 };
 
 /**
@@ -1185,6 +1187,7 @@ export async function loadAddonSubtitles(
               String(entry.movieReleaseName ?? entry.subtitleFileName ?? entry.releaseName ?? "").trim() ||
               undefined,
             hashMatch: entry.m === "h",
+            fps: Number(entry.fpsMilli) > 0 ? Number(entry.fpsMilli) / 1000 : undefined,
           }))
           .filter((entry) => entry.url);
       } catch {

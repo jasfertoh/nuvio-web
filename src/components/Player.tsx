@@ -95,7 +95,7 @@ import {
   type WatchIndex,
 } from "../lib/progress";
 import { EpisodeRow } from "./Details";
-import { subtitleMatchesVideo } from "../lib/subtitleMatch";
+import { subtitleFrameRateMatches, subtitleMatchesVideo } from "../lib/subtitleMatch";
 import { nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
 import { Select } from "./Select";
 import {
@@ -179,6 +179,11 @@ const ASPECT_MODES: ResizeMode[] = ["Fit", "Fill", "Stretch"];
 
 /** How long the controls and cursor stay up after the last movement while playing. */
 const CONTROLS_HIDE_MS = 2000;
+/** Subtitle size multiplier for this screen: 1 on a phone, up to 1.75 on a desktop or TV. */
+function screenSubtitleScale(): number {
+  const side = Math.min(window.innerWidth, window.innerHeight);
+  return Math.round(clamp(side / 600, 1, 1.75) * 100) / 100;
+}
 /** How long a pause sits untouched before it shows what is paused, as Netflix does. */
 const PAUSED_INFO_MS = 5000;
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -404,6 +409,9 @@ export function Player({
   useEffect(() => () => window.clearTimeout(hudTimer.current), []);
   const [audioOpen, setAudioOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+  // Which panel of the subtitle screen shows on a narrow screen, where the
+  // three columns would otherwise stack into one long scroll.
+  const [subtitleTab, setSubtitleTab] = useState<"choice" | "language" | "style">("choice");
   const [pausedInfo, setPausedInfo] = useState(false);
   const pausedTimer = useRef<number | undefined>(undefined);
   // Read by the pause timer, which outlives the render that started it.
@@ -550,7 +558,14 @@ export function Player({
   /** Extraction is only started once the viewer asks for subtitles. */
   const [subtitlesRequested, setSubtitlesRequested] = useState(false);
   /** Subtitles offered by the installed addons: separate files, so quick. */
-  const [addonSubtitles, setAddonSubtitles] = useState<AddonSubtitle[]>([]);
+  const [releaseMatchedSubtitles, setAddonSubtitles] = useState<AddonSubtitle[]>([]);
+  const [videoFps, setVideoFps] = useState(0);
+  // Filtered again once the proxy says the video's frame rate, which usually
+  // arrives after the addons have answered.
+  const addonSubtitles = useMemo(
+    () => releaseMatchedSubtitles.filter((track) => subtitleFrameRateMatches(track.fps, videoFps)),
+    [releaseMatchedSubtitles, videoFps],
+  );
   /** Whether the addons have been asked yet, which decides the fallback. */
   const [addonSubtitlesAsked, setAddonSubtitlesAsked] = useState(false);
   /** Read inside listeners that must not re-bind when the length arrives. */
@@ -669,6 +684,12 @@ export function Player({
    */
   const subtitleFontSizeSp =
     titleFontSizeSp ?? deviceSubtitleFontSize() ?? settings.subtitleFontSizeSp;
+  const [subtitleScale, setSubtitleScale] = useState(screenSubtitleScale);
+  useEffect(() => {
+    const update = () => setSubtitleScale(screenSubtitleScale());
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const [aspectMode, setAspectMode] = useState<ResizeMode>("Fit");
 
@@ -739,7 +760,10 @@ export function Player({
     const stroke = settings.subtitleOutlineEnabled
       ? `-webkit-text-stroke:${drawn}px ${outline}; paint-order:stroke fill;`
       : "";
-    const fontSize = clamp(subtitleFontSizeSp, 6, 40);
+    // The setting reads right on a phone; a desktop or TV screen is viewed
+    // from further away, so it is scaled by the screen's shorter side - 1x up
+    // to a phone's 600px, rising to 1.75x by a 1050px-tall monitor or TV.
+    const fontSize = Math.round(clamp(subtitleFontSizeSp, 6, 40) * subtitleScale);
     // Stated as a length rather than a multiplier: the setting is in pixels of
     // extra room, so it means the same thing whatever the font size is. The
     // floor is half the font size, only there so a small font and a very
@@ -758,7 +782,7 @@ export function Player({
       ? ` .player-view video::-webkit-media-text-track-container { transform:translateY(${-clamp(settings.subtitleBottomOffset, -8, 600)}px); }`
       : "";
     return `.player-view video::cue { color:${color}; background:${background}; font-family:${subtitleFontStack(settings.subtitleFontFamily)}; font-size:${fontSize}px; line-height:${lineHeight}px; font-weight:${settings.subtitleBold ? 700 : 400}; text-shadow:${shadow}; ${stroke} -webkit-font-smoothing:antialiased; }${layerShift}`;
-  }, [settings, subtitleFontSizeSp]);
+  }, [settings, subtitleFontSizeSp, subtitleScale]);
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
@@ -1662,6 +1686,7 @@ export function Player({
     setAspectMode("Fit");
     setProxyStart(null);
     setProxyDuration(0);
+    setVideoFps(0);
     setProxyAudio([]);
     setProxySubtitles([]);
     // Not zero: this title's own correction, if it has one.
@@ -1682,6 +1707,7 @@ export function Player({
       .then((tracks) => {
         if (!tracks || abort.signal.aborted) return;
         if (tracks.durationSeconds > 0) setProxyDuration(tracks.durationSeconds);
+        if (tracks.fps > 0) setVideoFps(tracks.fps);
         if (tracks.audio.length > 1) {
           setProxyAudio(tracks.audio);
           setAudioTracks(
@@ -2977,8 +3003,27 @@ export function Player({
       {subtitleOpen && (
         <div className="subtitle-screen">
           <div className="subtitle-screen-title">Subtitles</div>
-          <div className="subtitle-screen-grid">
-            <div className="subtitle-rail">
+          <div className="subtitle-tabs" role="tablist">
+            {(
+              [
+                ["choice", "Subtitles"],
+                ["language", "Language"],
+                ...(onPlayerSetting ? [["style", "Style"]] : []),
+              ] as [typeof subtitleTab, string][]
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={subtitleTab === id}
+                className={subtitleTab === id ? "selected" : ""}
+                onClick={() => setSubtitleTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className={`subtitle-screen-grid shows-${subtitleTab}`}>
+            <div className="subtitle-rail rail-language">
               <button
                 className={`subtitle-language${subtitleLanguageFilter === null ? " selected" : ""}`}
                 onClick={() => setSubtitleLanguageFilter(null)}
@@ -2989,7 +3034,11 @@ export function Player({
                 <button
                   key={language.label}
                   className={`subtitle-language${subtitleLanguageFilter === language.label ? " selected" : ""}`}
-                  onClick={() => setSubtitleLanguageFilter(language.label)}
+                  onClick={() => {
+                    setSubtitleLanguageFilter(language.label);
+                    // In tab mode the choice is the next thing wanted.
+                    setSubtitleTab("choice");
+                  }}
                 >
                   <span>{language.label}</span>
                 </button>
@@ -3001,7 +3050,7 @@ export function Player({
                 reaches for while watching - buried under fifty subtitle
                 options they looked like they did not exist. */}
             {onPlayerSetting && (
-              <div className="subtitle-rail subtitle-rail-style">
+              <div className="subtitle-rail subtitle-rail-style rail-style">
                 {subtitleStyleRows.map((row) =>
                   "action" in row ? (
                     <button
@@ -3030,7 +3079,7 @@ export function Player({
               </div>
             )}
 
-            <div className="subtitle-rail">
+            <div className="subtitle-rail rail-choice">
               <button
                 className={`subtitle-option${selectedSubtitle === -1 ? " selected" : ""}`}
                 onClick={() => selectSubtitle(-1)}

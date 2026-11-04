@@ -10190,3 +10190,46 @@ html.native-player-active .player-view.native-player.native-player-loading {
     padding: 0 6px;
   }
 }
+
+/* Subtitle screen: three columns where there is room, tabs where there is not. */
+.subtitle-tabs {
+  display: none;
+}
+.rail-language,
+.rail-style,
+.rail-choice {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .subtitle-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 14px;
+    background: #ffffff14;
+    align-self: flex-start;
+  }
+  .subtitle-tabs button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: #c9d0d6;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .subtitle-tabs button.selected {
+    background: #f4f6f7;
+    color: #090b0d;
+  }
+  .subtitle-screen-grid > .subtitle-rail {
+    display: none;
+  }
+  .subtitle-screen-grid.shows-choice > .rail-choice,
+  .subtitle-screen-grid.shows-language > .rail-language,
+  .subtitle-screen-grid.shows-style > .rail-style {
+    display: grid;
+  }
+}

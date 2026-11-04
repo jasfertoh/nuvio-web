@@ -34,6 +34,8 @@ export type ProxySubtitleTrack = {
 
 export type ProxyTracks = {
   durationSeconds: number;
+  /** The video's frame rate, or 0 where the proxy could not say. */
+  fps: number;
   audio: ProxyAudioTrack[];
   subtitles: ProxySubtitleTrack[];
 };
@@ -59,11 +61,12 @@ export async function fetchProxyTracks(
   const response = await fetch(target, { signal });
   if (!response.ok) return null;
   const data = (await response.json().catch(() => null)) as
-    | { durationSeconds?: number; tracks?: ProxyAudioTrack[]; subtitles?: ProxySubtitleTrack[] }
+    | { durationSeconds?: number; tracks?: ProxyAudioTrack[]; subtitles?: ProxySubtitleTrack[]; video?: { fps?: number } | null }
     | null;
   if (!data) return null;
   return {
     durationSeconds: Number(data.durationSeconds) || 0,
+    fps: Number(data.video?.fps) || 0,
     audio: Array.isArray(data.tracks) ? data.tracks : [],
     subtitles: Array.isArray(data.subtitles) ? data.subtitles : [],
   };

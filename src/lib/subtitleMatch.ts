@@ -66,3 +66,13 @@ export function subtitleMatchesVideo(subtitle: SubtitleRelease, videoName: strin
   if (sub.source !== video.source || sub.resolution !== video.resolution) return false;
   return !video.service || sub.service === video.service;
 }
+
+/**
+ * A subtitle timed at another frame rate drifts the whole way through: 24
+ * against 23.976 is 2.6 seconds by the end of a 44-minute episode. Either rate
+ * unknown is not evidence of a mismatch.
+ */
+export function subtitleFrameRateMatches(subtitleFps: number | undefined, videoFps: number): boolean {
+  if (!subtitleFps || !videoFps) return true;
+  return Math.abs(subtitleFps - videoFps) < 0.01;
+}

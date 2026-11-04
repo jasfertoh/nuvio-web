@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { releaseTraits, subtitleMatchesVideo } from "../src/lib/subtitleMatch.ts";
+import { releaseTraits, subtitleFrameRateMatches, subtitleMatchesVideo } from "../src/lib/subtitleMatch.ts";
 
 const pack = "Dead-End Job (2026) S01 EP (01-08) TRUE WEB-DL - 1080p - AVC - [Tamil + Telugu + Hindi + Eng + Kor]";
 const marky = "Dead.End.Job.2026.S01E03.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-MARKY";
@@ -27,4 +27,12 @@ test("a hash match always counts, and no release information never does", () => 
   assert.equal(subtitleMatchesVideo({ hashMatch: true }, undefined), true);
   assert.equal(subtitleMatchesVideo({}, pack), false);
   assert.equal(subtitleMatchesVideo({ release: marky }, undefined), false);
+});
+
+test("a subtitle at another frame rate is refused; an unknown rate is not", () => {
+  assert.equal(subtitleFrameRateMatches(23.976, 23.976), true);
+  assert.equal(subtitleFrameRateMatches(24, 23.976), false);
+  assert.equal(subtitleFrameRateMatches(25, 23.976), false);
+  assert.equal(subtitleFrameRateMatches(undefined, 23.976), true);
+  assert.equal(subtitleFrameRateMatches(24, 0), true);
 });
