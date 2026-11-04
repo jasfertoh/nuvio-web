@@ -96,6 +96,7 @@ import {
 } from "../lib/progress";
 import { EpisodeRow } from "./Details";
 import { subtitleFrameRateMatches, subtitleMatchesVideo } from "../lib/subtitleMatch";
+import { ProxyMse } from "../lib/proxyMse";
 import { nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
 import { Select } from "./Select";
 import {
@@ -564,6 +565,8 @@ export function Player({
   // A seek on a transcode reloads the source. Paused before it, paused after
   // it - as Netflix does - rather than the reload starting the film again.
   const holdPausedRef = useRef(false);
+  // The transcode fed through Media Source, when it is - see proxyMse.ts.
+  const mseRef = useRef<ProxyMse | null>(null);
   /**
    * The position a reload is currently fetching, or null when none is.
    *
@@ -971,6 +974,15 @@ export function Player({
         return;
       }
       if (!element) return;
+      const mse = mseRef.current;
+      if (mse) {
+        // Inside what has arrived: the element moves at once. Outside it: a
+        // new stream from that point, appended to the same buffer.
+        if (!mse.holds(target)) setWaiting(true);
+        mse.seek(target);
+        setCurrentTime(target);
+        return;
+      }
       // Shown straight away rather than waiting for the browser to admit it is
       // stalling, which it only does once the gap is already noticeable.
       setWaiting(true);
@@ -1481,6 +1493,8 @@ export function Player({
 
     const cleanup = () => {
       disposed = true;
+      mseRef.current?.dispose();
+      mseRef.current = null;
       setRemuxActive(false);
       window.clearTimeout(hideTimer.current);
       element.removeEventListener("playing", onPlaying);
@@ -1678,6 +1692,33 @@ export function Player({
           });
         })
         .catch(fail);
+    } else if (proxied && ProxyMse.supported()) {
+      // Through Media Source, so seeks inside what has arrived are instant.
+      // Anything it cannot carry falls back to the element's own src.
+      const mse = new ProxyMse(
+        element,
+        (seconds) =>
+          proxiedPlaybackUrl(url, {
+            audioOrdinal: proxyAudioOrdinal,
+            startSeconds: seconds,
+            reencode: reencodeFor === url,
+          }),
+        {
+          onFallback: () => {
+            if (disposed) return;
+            mseRef.current = null;
+            element.src = playbackUrl;
+            element.load();
+            begin();
+          },
+          onReady: () => {
+            if (!disposed) begin();
+          },
+        },
+      );
+      mseRef.current = mse;
+      if (proxyDurationRef.current > 0) mse.setDuration(proxyDurationRef.current);
+      mse.start(effectiveStartSeconds ?? 0);
     } else {
       element.src = playbackUrl;
       element.load();
@@ -1782,6 +1823,7 @@ export function Player({
 
   useEffect(() => {
     if (proxyDuration > 0) setDuration(proxyDuration);
+    if (proxyDuration > 0) mseRef.current?.setDuration(proxyDuration);
   }, [proxyDuration]);
 
   // Extraction is a pass over the file, so the list is polled until the tracks
