@@ -190,6 +190,7 @@ import {
 } from "./lib/metaScreenSettings";
 import { readDebridRules } from "./lib/webSettings";
 import { applyDebridStreamSettings } from "./lib/debridStreams";
+import { pickBingeCandidates } from "./lib/nextEpisode";
 import {
   canResolveDebrid,
   needsDebridResolve,
@@ -2101,32 +2102,23 @@ export function App() {
   );
 
   /**
-   * The source to continue a run with: the same pick autoplay would make,
-   * keeping to the binge group so quality, audio and host stay as chosen.
+   * The source to continue a run with. A binge group names a release that
+   * serves a whole run, so continuing within it keeps the quality, audio and
+   * host already chosen. Torrents count: several are tried because the first
+   * may not be one Torbox holds. (Upstream's selectAutoStream skips anything
+   * without a url, which for torrent addons finds nothing at all.)
    */
   const episodeStream = useCallback(
     async (current: { meta: Meta; stream: Stream }, next: Video) => {
-      const bingeGroup = current.stream.behaviorHints?.bingeGroup;
-      const order = (streams: Stream[]) =>
-        platform.debrid ? applyDebridStreamSettings(streams, debridRules) : streams;
-      const chosen = await resolveAutoStream(
-        (onBatch) =>
-          loadStreams(current.meta.type, next.id, addons, undefined, (_name, _batch, ordered) =>
-            onBatch(order(ordered)),
-          ).then(order),
-        (streams) =>
-          selectAutoStream(
-            streams,
-            webSettings.player,
-            addons.map((addon) => addon.manifest?.name || addon.name || ""),
-            bingeGroup,
-            true,
-          ),
-        webSettings.player.autoPlayTimeoutSeconds,
-      );
-      return chosen ? playableStream(chosen, next) : null;
+      const loaded = await loadStreams(current.meta.type, next.id, addons);
+      const streams = platform.debrid ? applyDebridStreamSettings(loaded, debridRules) : loaded;
+      for (const candidate of pickBingeCandidates(streams, current.stream.behaviorHints?.bingeGroup)) {
+        const playable = await playableStream(candidate, next);
+        if (playable) return playable;
+      }
+      return null;
     },
-    [addons, debridRules, playableStream, webSettings.player],
+    [addons, debridRules, playableStream],
   );
 
   const openContinueSources = useCallback(
@@ -2680,6 +2672,7 @@ export function App() {
           addons={addons}
           settings={webSettings.player}
           profileKey={String(profile?.profileIndex ?? 0)}
+          blurUnwatchedEpisodes={webSettings.metaScreen.blurUnwatchedEpisodes}
           notice={message}
           onDismissNotice={() => setMessage("")}
           providerCredentials={providerCredentials}

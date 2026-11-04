@@ -62,6 +62,7 @@ import {
   LoaderCircle,
   Maximize,
   Music2,
+  CircleGauge,
   Ratio,
   Layers,
   Pause,
@@ -84,7 +85,6 @@ import {
 import {
   hasEpisodeAired,
   resolveNextEpisode,
-  shouldShowNextEpisode,
 } from "../lib/nextEpisode";
 import {
   episodePercent,
@@ -93,10 +93,10 @@ import {
   type WatchIndex,
 } from "../lib/progress";
 import { EpisodeRow } from "./Details";
+import { nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
 import { Select } from "./Select";
 import {
   activeSkipSegment,
-  creditsStart,
   loadSkipSegments,
   skipLabel,
   type SkipSegment,
@@ -174,6 +174,19 @@ function runtimeHintSeconds(meta: Meta, video?: Video) {
  */
 const ASPECT_MODES: ResizeMode[] = ["Fit", "Fill", "Stretch"];
 
+/** How long the controls and cursor stay up after the last movement while playing. */
+const CONTROLS_HIDE_MS = 2000;
+const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+const PLAYBACK_RATE_KEY = "nuvio-web-playback-rate";
+function storedPlaybackRate(): number {
+  try {
+    const value = Number(localStorage.getItem(PLAYBACK_RATE_KEY));
+    return (PLAYBACK_RATES as readonly number[]).includes(value) ? value : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export function Player({
   stream,
   meta,
@@ -194,6 +207,7 @@ export function Player({
   notice = "",
   onDismissNotice,
   profileKey = "0",
+  blurUnwatchedEpisodes = false,
   providerCredentials = [],
 }: {
   stream: Stream;
@@ -254,6 +268,8 @@ export function Player({
   onDismissNotice?(): void;
   /** Which profile is watching, so one person's corrections stay theirs. */
   profileKey?: string;
+  /** The same spoiler setting the detail page's episode list obeys. */
+  blurUnwatchedEpisodes?: boolean;
   /** Needed to tell which torrents Torbox actually holds. */
   providerCredentials?: ProviderCredentialRow[];
   /** Reports a resume point. Fired periodically, on pause, and on exit. */
@@ -380,6 +396,8 @@ export function Player({
   );
   useEffect(() => () => window.clearTimeout(hudTimer.current), []);
   const [audioOpen, setAudioOpen] = useState(false);
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(storedPlaybackRate);
   const [subtitleOpen, setSubtitleOpen] = useState(false);
   /** Text tracks on the element, rebuilt whenever the element's list changes. */
   const [subtitleTracks, setSubtitleTracks] = useState<AudioChoice[]>([]);
@@ -415,6 +433,9 @@ export function Player({
   const [skipSegments, setSkipSegments] = useState<SkipSegment[]>([]);
   /** True from choosing an episode until its stream arrives. */
   const [switching, setSwitching] = useState(false);
+  const [nextCountdown, setNextCountdown] = useState<number | null>(null);
+  // Once per episode: dismissing or seeking back must not start it again.
+  const autoNextTriggered = useRef(false);
   /**
    * Ticks so the finish time keeps up while paused.
    *
@@ -736,11 +757,38 @@ export function Player({
     if (running)
       hideTimer.current = window.setTimeout(() => {
         setAudioOpen(false);
+        setSpeedOpen(false);
         setExternalPlayerOpen(false);
         setBrightnessOpen(false);
         setControlsVisible(false);
-      }, 3000);
+      }, CONTROLS_HIDE_MS);
   }, []);
+  // The countdown above only starts if playback is already running when it is
+  // asked. Resuming with Space, or the native player starting on its own, turns
+  // playback on after that, so nothing hid the controls or the cursor until the
+  // mouse moved again. Restart it whenever playback starts; a pause holds them.
+  useEffect(() => {
+    const element = videoRef.current;
+    if (element && element.playbackRate !== playbackRate) {
+      element.defaultPlaybackRate = playbackRate;
+      element.playbackRate = playbackRate;
+    }
+    engineRef.current?.setPlaybackRate(playbackRate);
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(PLAYBACK_RATE_KEY, String(playbackRate));
+    } catch {
+      // Private mode: the speed still holds for this session.
+    }
+  }, [playbackRate]);
+  useEffect(() => {
+    if (playing) showControls();
+    else {
+      window.clearTimeout(hideTimer.current);
+      setControlsVisible(true);
+    }
+  }, [playing, showControls]);
   /**
    * Restart the hide timer without summoning the controls.
    *
@@ -965,6 +1013,7 @@ export function Player({
     transparentRoots.forEach((node) => node.classList.add("native-player-active"));
     setSwitching(false);
     setNextDismissed(false);
+    autoNextTriggered.current = false;
     setStatus("");
     setError("");
     setWarning("");
@@ -1580,6 +1629,7 @@ export function Player({
   // proxy is running anyway, so asking costs the source nothing.
   useEffect(() => {
     setNextDismissed(false);
+    autoNextTriggered.current = false;
     setSourcesOpen(false);
     setSourceList([]);
     setAspectMode("Fit");
@@ -2197,6 +2247,7 @@ export function Player({
         if (
           subtitleOpen ||
           audioOpen ||
+          speedOpen ||
           externalPlayerOpen ||
           sourcesOpen ||
           brightnessOpen
@@ -2204,13 +2255,14 @@ export function Player({
           event.preventDefault();
           setSubtitleOpen(false);
           setAudioOpen(false);
+          setSpeedOpen(false);
           setExternalPlayerOpen(false);
           setSourcesOpen(false);
           setBrightnessOpen(false);
         }
         return;
       }
-      if (subtitleOpen || audioOpen || externalPlayerOpen || sourcesOpen) return;
+      if (subtitleOpen || audioOpen || speedOpen || externalPlayerOpen || sourcesOpen) return;
       const modified = event.ctrlKey || event.metaKey || event.altKey;
       if (modified && event.key.toLowerCase() !== "f") return;
       if (event.key === " " || event.key.toLowerCase() === "k") {
@@ -2244,6 +2296,7 @@ export function Player({
     brightnessOpen,
     subtitleOpen,
     audioOpen,
+    speedOpen,
     externalPlayerOpen,
     sourcesOpen,
   ]);
@@ -2614,12 +2667,30 @@ export function Player({
     !!nextEpisode &&
     !nextDismissed &&
     !error &&
-    shouldShowNextEpisode(
-      currentTime * 1000,
-      duration * 1000,
-      undefined,
-      creditsStart(skipSegments),
-    );
+    nextEpisodeDue(currentTime, duration, settings, skipSegments);
+  const startEpisodeRef = useRef(startEpisode);
+  startEpisodeRef.current = startEpisode;
+  const canAutoContinue =
+    showNextEpisode &&
+    settings.autoPlayNextEpisode &&
+    !switching &&
+    ((playing && !waiting) || (duration > 0 && currentTime >= duration));
+  useEffect(() => {
+    setNextCountdown(null);
+    if (!canAutoContinue || !nextEpisode || autoNextTriggered.current) return;
+    let remaining = 3;
+    setNextCountdown(remaining);
+    const timer = window.setInterval(() => {
+      remaining -= 1;
+      setNextCountdown(remaining);
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+        autoNextTriggered.current = true;
+        startEpisodeRef.current(nextEpisode);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [canAutoContinue, nextEpisode]);
 
   const seekLimit = duration || 0;
   const displayedTime = seekPreview ?? currentTime;
@@ -2826,12 +2897,13 @@ export function Player({
           </div>
         </div>
       )}
-      {(subtitleOpen || audioOpen || sourcesOpen) && (
+      {(subtitleOpen || audioOpen || speedOpen || sourcesOpen) && (
         <div
           className="track-backdrop"
           onClick={() => {
             setSubtitleOpen(false);
             setAudioOpen(false);
+            setSpeedOpen(false);
             setSourcesOpen(false);
           }}
         />
@@ -2974,6 +3046,25 @@ export function Player({
               <ExternalLink /> Open externally
             </a>
           )}
+        </div>
+      )}
+      {speedOpen && (
+        <div className="track-dialog">
+          <div className="track-dialog-title">Speed</div>
+          <div className="track-rail">
+            {PLAYBACK_RATES.map((rate) => (
+              <button
+                key={rate}
+                className={`track-item${playbackRate === rate ? " selected" : ""}`}
+                onClick={() => {
+                  setPlaybackRate(rate);
+                  setSpeedOpen(false);
+                }}
+              >
+                <span className="track-item-main">{rate === 1 ? "Normal" : `${rate}×`}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="player-controls">
@@ -3184,12 +3275,28 @@ export function Player({
                 onClick={() => {
                   setSubtitleOpen(false);
                   setExternalPlayerOpen(false);
+                  setSpeedOpen(false);
                   setAudioOpen((value) => !value);
                 }}
               >
                 <Music2 />
               </button>
             </div>
+            {!nativePlayer && (
+              <button
+                aria-label={`Speed, ${playbackRate === 1 ? "normal" : `${playbackRate}×`}`}
+                className={speedOpen || playbackRate !== 1 ? "active" : ""}
+                aria-expanded={speedOpen}
+                onClick={() => {
+                  setSubtitleOpen(false);
+                  setExternalPlayerOpen(false);
+                  setAudioOpen(false);
+                  setSpeedOpen((value) => !value);
+                }}
+              >
+                <CircleGauge />
+              </button>
+            )}
             {!nativePlayer && externalUrl && !!platform.externalPlayer.options("player").length && (
               <div className="external-player-picker">
                 <button
@@ -3252,7 +3359,7 @@ export function Player({
       {showNextEpisode && nextEpisode && (
         <div className="player-next">
           <div>
-            <small>Up next</small>
+            <small>{nextCountdown != null ? `Playing in ${nextCountdown}…` : "Up next"}</small>
             <strong>
               {nextEpisode.season != null && nextEpisode.episode != null
                 ? `S${nextEpisode.season}·E${nextEpisode.episode} `
@@ -3328,7 +3435,11 @@ export function Player({
                     watched={watchIndex?.watched.has(key) ?? false}
                     percent={watchIndex ? episodePercent(watchIndex, key) : 0}
                     remaining={watchIndex ? remainingShort(watchIndex, key) : ""}
-                    blurred={false}
+                    blurred={shouldBlurEpisode(
+                      blurUnwatchedEpisodes,
+                      watchIndex?.watched.has(key) ?? false,
+                      item.id === video?.id,
+                    )}
                     onPlay={() => startEpisode(item)}
                     onMenu={() => undefined}
                   />

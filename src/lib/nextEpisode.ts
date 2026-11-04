@@ -104,13 +104,35 @@ export function pickBingeStream(
   streams: readonly Stream[],
   bingeGroup?: string,
 ): Stream | null {
-  const playable = streams.filter((stream) => stream.url || stream.externalUrl);
-  if (!playable.length) return null;
-  if (bingeGroup) {
-    const same = playable.find(
-      (stream) => stream.behaviorHints?.bingeGroup === bingeGroup,
-    );
-    if (same) return same;
-  }
-  return playable[0];
+  return pickBingeCandidates(streams, bingeGroup)[0] ?? null;
+}
+
+/**
+ * Sources to try for the next episode, best first.
+ *
+ * A torrent counts. Addons return those far more often than direct URLs, and
+ * requiring a `url` here meant that for anyone whose addons are torrent-based
+ * - which is the case debrid exists for - continuing to the next episode found
+ * nothing at all and said so. They need resolving before they can be played,
+ * so several are offered: the first may not be cached.
+ */
+export function pickBingeCandidates(
+  streams: readonly Stream[],
+  bingeGroup?: string,
+  limit = 6,
+): Stream[] {
+  const usable = streams.filter(
+    (stream) => stream.url || stream.externalUrl || stream.infoHash,
+  );
+  const ordered = bingeGroup
+    ? [
+        ...usable.filter(
+          (stream) => stream.behaviorHints?.bingeGroup === bingeGroup,
+        ),
+        ...usable.filter(
+          (stream) => stream.behaviorHints?.bingeGroup !== bingeGroup,
+        ),
+      ]
+    : usable;
+  return ordered.slice(0, limit);
 }
