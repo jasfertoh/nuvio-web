@@ -1,4 +1,5 @@
 import type { Stream, Video } from "../types";
+import { offeredInBrowser, streamQuality } from "./streamPresentation.ts";
 
 /**
  * When the next episode is offered, and which source it plays from.
@@ -135,4 +136,22 @@ export function pickBingeCandidates(
       ]
     : usable;
   return ordered.slice(0, limit);
+}
+
+/**
+ * Sources for the next episode in the order to try them: the quality already
+ * being watched first, addon order otherwise. In the browser 2160p is left out,
+ * as the sources sheet leaves it out - it played back green and cut short when
+ * a continuation fell through to a Dolby Vision 4K file.
+ */
+export function continuationOrder(
+  streams: readonly Stream[],
+  current: Stream,
+  browser: boolean,
+): Stream[] {
+  const quality = streamQuality(current);
+  return (browser ? streams.filter(offeredInBrowser) : [...streams])
+    .map((stream, index) => ({ stream, index, same: streamQuality(stream) === quality }))
+    .sort((a, b) => Number(b.same) - Number(a.same) || a.index - b.index)
+    .map(({ stream }) => stream);
 }

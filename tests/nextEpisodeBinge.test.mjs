@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pickBingeCandidates, pickBingeStream } from "../src/lib/nextEpisode.ts";
+import { continuationOrder, pickBingeCandidates, pickBingeStream } from "../src/lib/nextEpisode.ts";
 
 const direct = { url: "https://cdn/x.mkv", behaviorHints: {} };
 const torrent = { infoHash: "a".repeat(40), behaviorHints: {} };
@@ -30,4 +30,14 @@ test("the binge group is preferred but others still follow it", () => {
 test("several candidates are returned, capped", () => {
   const many = Array.from({ length: 20 }, () => ({ ...torrent }));
   assert.equal(pickBingeCandidates(many).length, 6);
+});
+
+test("a browser continuation skips 4K and keeps the quality being watched", () => {
+  const uhd = { name: "Comet 2160p", title: "dv.2160p", infoHash: "c".repeat(40), behaviorHints: {} };
+  const hd = { name: "Comet 1080p", title: "1080p", infoHash: "d".repeat(40), behaviorHints: {} };
+  const sd = { name: "Comet 720p", title: "720p", infoHash: "e".repeat(40), behaviorHints: {} };
+  const watching = { name: "Comet 1080p", title: "1080p", behaviorHints: {} };
+  assert.deepEqual(continuationOrder([uhd, sd, hd], watching, true), [hd, sd]);
+  // A native shell plays 4K itself, so only the ordering applies.
+  assert.deepEqual(continuationOrder([uhd, sd, hd], watching, false), [hd, uhd, sd]);
 });

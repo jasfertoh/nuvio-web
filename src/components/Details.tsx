@@ -49,6 +49,7 @@ import {
   type MetadataEnrichmentConfig,
 } from "../lib/metadataEnrichment";
 import { platform } from "../platform/index.ts";
+import { offeredInBrowser } from "../lib/streamPresentation.ts";
 import { canPlayInApp } from "../lib/externalPlayer";
 import { needsUnsendableHeaders, saveFilename } from "../lib/fileDownload";
 import {
@@ -583,13 +584,14 @@ export function Details({
    */
   const activeAddon =
     sourceAddon && sourceAddons.includes(sourceAddon) ? sourceAddon : "";
-  const visibleStreams = useMemo(
-    () =>
-      activeAddon
-        ? streams.filter((item) => item.addonName === activeAddon)
-        : streams,
-    [streams, activeAddon],
-  );
+  const visibleStreams = useMemo(() => {
+    // The browser plays through the proxy, which cannot show Dolby Vision and
+    // pays for 4K twice, so 2160p is not offered there; native shells keep it.
+    const offered = platform.debrid ? streams : streams.filter(offeredInBrowser);
+    return activeAddon
+      ? offered.filter((item) => item.addonName === activeAddon)
+      : offered;
+  }, [streams, activeAddon]);
   /** Where this would resume from, which is the useful thing to say up here. */
   const sourceResume = useMemo(() => {
     const row = watchIndex.progress.get(

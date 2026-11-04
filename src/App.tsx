@@ -190,7 +190,7 @@ import {
 } from "./lib/metaScreenSettings";
 import { readDebridRules } from "./lib/webSettings";
 import { applyDebridStreamSettings } from "./lib/debridStreams";
-import { pickBingeCandidates } from "./lib/nextEpisode";
+import { continuationOrder, pickBingeCandidates } from "./lib/nextEpisode";
 import {
   canResolveDebrid,
   needsDebridResolve,
@@ -2111,7 +2111,10 @@ export function App() {
   const episodeStream = useCallback(
     async (current: { meta: Meta; stream: Stream }, next: Video) => {
       const loaded = await loadStreams(current.meta.type, next.id, addons);
-      const streams = platform.debrid ? applyDebridStreamSettings(loaded, debridRules) : loaded;
+      const ordered = platform.debrid ? applyDebridStreamSettings(loaded, debridRules) : loaded;
+      // The browser plays through the proxy, which cannot show Dolby Vision
+      // and pays for 4K twice; native shells play it themselves.
+      const streams = continuationOrder(ordered, current.stream, !platform.debrid);
       for (const candidate of pickBingeCandidates(streams, current.stream.behaviorHints?.bingeGroup)) {
         const playable = await playableStream(candidate, next);
         if (playable) return playable;
