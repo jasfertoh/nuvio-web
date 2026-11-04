@@ -52,7 +52,7 @@ import {
   type ResizeMode,
   type WebPlayerSettings,
 } from "../lib/webSettings";
-import { subtitleFontStack } from "../lib/subtitleFonts";
+import { NETFLIX_STYLE, SUBTITLE_FONTS, SUBTITLE_FONT_KEYS, subtitleFontStack } from "../lib/subtitleFonts";
 import {
   ArrowLeft,
   Copy,
@@ -750,6 +750,11 @@ export function Player({
     titleFontSizeSp ?? deviceSubtitleFontSize() ?? settings.subtitleFontSizeSp;
   const [subtitleScale, setSubtitleScale] = useState(screenSubtitleScale);
   useEffect(() => {
+    // Asked for as soon as the preset is chosen, so the first line is in it.
+    if (settings.subtitleFontFamily !== "netflix") return;
+    void document.fonts?.load('500 20px "Inter Subtitles"').catch(() => {});
+  }, [settings.subtitleFontFamily]);
+  useEffect(() => {
     const update = () => setSubtitleScale(screenSubtitleScale());
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
@@ -842,7 +847,16 @@ export function Player({
     const layerShift = canShiftCueLayer
       ? ` .player-view video::-webkit-media-text-track-container { transform:translateY(${-clamp(settings.subtitleBottomOffset, -8, 600)}px); }`
       : "";
-    return `.player-view video::cue { color:${color}; background:${background}; font-family:${subtitleFontStack(settings.subtitleFontFamily)}; font-size:${fontSize}px; line-height:${lineHeight}px; font-weight:${settings.subtitleBold ? 700 : 400}; text-shadow:${shadow}; ${stroke} -webkit-font-smoothing:antialiased; }${layerShift}`;
+    // The Netflix-style preset is a look, not just a face: its shadow in place
+    // of the outline, no box, a medium weight. Colour and size stay yours.
+    const netflix = settings.subtitleFontFamily === "netflix";
+    const cueBackground = netflix ? "transparent" : background;
+    const cueShadow = netflix ? NETFLIX_STYLE.shadow : shadow;
+    const cueStroke = netflix ? "" : stroke;
+    const weight = netflix
+      ? settings.subtitleBold ? NETFLIX_STYLE.boldWeight : NETFLIX_STYLE.weight
+      : settings.subtitleBold ? 700 : 400;
+    return `.player-view video::cue { color:${color}; background:${cueBackground}; font-family:${subtitleFontStack(settings.subtitleFontFamily)}; font-size:${fontSize}px; line-height:${lineHeight}px; font-weight:${weight}; text-shadow:${cueShadow}; ${cueStroke} -webkit-font-smoothing:antialiased; }${layerShift}`;
   }, [settings, subtitleFontSizeSp, subtitleScale]);
 
   const showControls = useCallback(() => {
@@ -2115,6 +2129,20 @@ export function Player({
         label: subtitleDelayMs === 0 ? "Delay in sync" : "Reset Delay",
         action: () => setSubtitleDelayMs(0),
         disabled: subtitleDelayMs === 0,
+      },
+      {
+        // Cycles the faces; the Netflix-style preset is among them.
+        id: "font",
+        label: "Font",
+        value: SUBTITLE_FONTS[settings.subtitleFontFamily]?.label ?? SUBTITLE_FONTS.default.label,
+        down: () => {
+          const at = SUBTITLE_FONT_KEYS.indexOf(settings.subtitleFontFamily);
+          setting("subtitle_font_family", "string", SUBTITLE_FONT_KEYS[(at - 1 + SUBTITLE_FONT_KEYS.length) % SUBTITLE_FONT_KEYS.length]);
+        },
+        up: () => {
+          const at = SUBTITLE_FONT_KEYS.indexOf(settings.subtitleFontFamily);
+          setting("subtitle_font_family", "string", SUBTITLE_FONT_KEYS[(at + 1) % SUBTITLE_FONT_KEYS.length]);
+        },
       },
       {
         // Kept against this title rather than written to the profile: sizing

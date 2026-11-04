@@ -1,10 +1,10 @@
 /**
  * The faces subtitles can be set in.
  *
- * Stacks rather than single names, and only families a browser already has -
- * nothing is fetched. A line of dialogue that arrives late because its font is
- * still downloading is worse than one in a face nobody picked, and this app
- * already spends its bandwidth on the video.
+ * Stacks rather than single names, and families a browser already has - with
+ * one exception, the Netflix-style preset, whose face (Inter, OFL) ships with
+ * the app as a 48KB file and is fetched only when that preset is in use. A
+ * line that arrives before the font shows in the fallback rather than waiting.
  *
  * Stored against a key rather than the stack itself, so a stack can be
  * corrected later without rewriting what every profile has saved.
@@ -34,6 +34,23 @@ export const SUBTITLE_FONTS = {
     label: "Monospace",
     stack: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
   },
+  // Netflix's own face (Netflix Sans) is not licensed for use elsewhere; Inter
+  // is the open face closest to it. More than a font: see NETFLIX_STYLE.
+  netflix: {
+    label: "Netflix-style",
+    stack: "'Inter Subtitles', Inter, 'Helvetica Neue', Arial, sans-serif",
+  },
+} as const;
+
+/**
+ * What the Netflix-style preset changes besides the face: a soft drop shadow
+ * instead of an outline, no box, and a medium weight. Colour, size and
+ * position stay the viewer's.
+ */
+export const NETFLIX_STYLE = {
+  weight: 500,
+  boldWeight: 700,
+  shadow: "0 0 2px #000, 0 0 6px #000c, 0 2px 3px #000",
 } as const;
 
 export type SubtitleFontKey = keyof typeof SUBTITLE_FONTS;
