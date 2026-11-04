@@ -97,6 +97,8 @@ import {
   type WatchIndex,
 } from "../lib/progress";
 import { EpisodeRow } from "./Details";
+import { objectFitForResizeMode, visibleResizeMode } from "../lib/pictureMode";
+import { t } from "../lib/i18n.ts";
 import { subtitleFrameRateMatches, subtitleMatchesVideo } from "../lib/subtitleMatch";
 import { ProxyMse } from "../lib/proxyMse";
 import { nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
@@ -178,7 +180,9 @@ function runtimeHintSeconds(meta: Meta, video?: Video) {
  * that visibly does nothing. Zoom is still reachable from Settings and still
  * behaves as it always has.
  */
-const ASPECT_MODES: ResizeMode[] = ["Fit", "Fill", "Stretch"];
+// Nuvio's own picture modes, in its order. "Fill" from older synced settings
+// is the same picture as Zoom and is read as Zoom (visibleResizeMode).
+const ASPECT_MODES: ResizeMode[] = ["Fit", "Zoom", "Stretch"];
 
 /**
  * The side drawer the player's panels share - episodes, audio, speed - so they
@@ -204,7 +208,7 @@ function PlayerDrawer({
             <span className="eyebrow">{eyebrow}</span>
             <strong>{title}</strong>
           </div>
-          <button className="circle-button" aria-label="Close" onClick={onClose}>
+          <button className="circle-button" aria-label={t("player.close")} onClick={onClose}>
             <X />
           </button>
         </header>
@@ -446,6 +450,20 @@ export function Player({
   useEffect(() => () => window.clearTimeout(hudTimer.current), []);
   const [audioOpen, setAudioOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+  // Upstream's stable volume: a compressor between the film and the speakers,
+  // remembered under the same key.
+  const [stableVolume, setStableVolume] = useState(() => {
+    try {
+      return localStorage.getItem("nuvio-web-stable-volume") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const audioGraph = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    compressor: DynamicsCompressorNode;
+  } | null>(null);
   // Which panel of the subtitle screen shows on a narrow screen, where the
   // three columns would otherwise stack into one long scroll.
   const [subtitleTab, setSubtitleTab] = useState<"choice" | "language" | "style">("choice");
@@ -737,7 +755,9 @@ export function Player({
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const [aspectMode, setAspectMode] = useState<ResizeMode>("Fit");
+  // Starts from the account's picture setting, as every Nuvio client does,
+  // rather than always Fit; the button changes it for this session only.
+  const [aspectMode, setAspectMode] = useState<ResizeMode>(() => visibleResizeMode(settings.resizeMode));
 
   /** Whether this source is going through the proxy at all. */
   const proxiedPlayback = useMemo(
@@ -774,12 +794,7 @@ export function Player({
     () => /truehd|dts(?:-hd)?|e-?ac-?3|dd\+|atmos|\.mkv\b/i.test(sourceText),
     [sourceText],
   );
-  const videoFit =
-    aspectMode === "Stretch"
-      ? "fill"
-      : aspectMode === "Fit"
-        ? "contain"
-        : "cover";
+  const videoFit = objectFitForResizeMode(aspectMode);
   const cueCss = useMemo(() => {
     const color = browserColor(settings.subtitleTextColor, "#fff");
     const background = browserColor(
@@ -864,6 +879,50 @@ export function Player({
     }
     engineRef.current?.setPlaybackRate(playbackRate);
   });
+  useEffect(() => {
+    try {
+      localStorage.setItem("nuvio-web-stable-volume", String(stableVolume));
+    } catch {
+      // Not remembered; still applied for this session.
+    }
+    engineRef.current?.setStableVolume(stableVolume);
+    const element = videoRef.current;
+    if (!element || nativePlayer) return;
+    // The element's sound can be routed through Web Audio only when it is
+    // same-origin or CORS-enabled - the proxy is both - or it goes silent.
+    // Once routed it stays routed, so the graph is built only when needed.
+    // shortcut: a later non-proxied, non-CORS source on this element would
+    // play silent; every source is proxied on this deployment. Upgrade by
+    // remounting the <video> when that stops being true.
+    if (!audioGraph.current) {
+      if (!stableVolume || !proxiedPlayback) return;
+      const context = new AudioContext();
+      const compressor = context.createDynamicsCompressor();
+      // The decoding player's own settings, so both paths sound alike.
+      compressor.threshold.value = -24;
+      compressor.knee.value = 18;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+      audioGraph.current = { context, source: context.createMediaElementSource(element), compressor };
+    }
+    const { context, source, compressor } = audioGraph.current;
+    source.disconnect();
+    compressor.disconnect();
+    if (stableVolume) {
+      source.connect(compressor);
+      compressor.connect(context.destination);
+    } else source.connect(context.destination);
+    void context.resume().catch(() => {});
+  }, [stableVolume, proxiedPlayback]);
+  useEffect(() => {
+    // A context left suspended would silence the film; playing resumes it.
+    const element = videoRef.current;
+    if (!element) return;
+    const resume = () => void audioGraph.current?.context.resume().catch(() => {});
+    element.addEventListener("playing", resume);
+    return () => element.removeEventListener("playing", resume);
+  }, []);
   useEffect(() => {
     try {
       localStorage.setItem(PLAYBACK_RATE_KEY, String(playbackRate));
@@ -1768,7 +1827,7 @@ export function Player({
     autoNextTriggered.current = false;
     setSourcesOpen(false);
     setSourceList([]);
-    setAspectMode("Fit");
+    setAspectMode(visibleResizeMode(settings.resizeMode));
     setProxyStart(null);
     setProxyDuration(0);
     setVideoFps(0);
@@ -2951,7 +3010,7 @@ export function Player({
       <div className="player-shade player-shade-top" />
       <div className="player-shade player-shade-bottom" />
       <div className="player-top">
-        <button className="circle-button" aria-label="Back" onClick={closePlayer}>
+        <button className="circle-button" aria-label={t("player.back")} onClick={closePlayer}>
           <ArrowLeft />
         </button>
         <div>
@@ -2967,7 +3026,7 @@ export function Player({
         </div>
         {endsAt && (
           <span className="player-ends-at" title="Estimated finish time">
-            Ends at {endsAt}
+            {t("player.endsAt", { time: endsAt })}
           </span>
         )}
       </div>
@@ -3021,12 +3080,12 @@ export function Player({
         </div>
       )}
       {!error && waiting && settings.showLoadingOverlay && (
-        <div className="player-center player-center-busy" aria-label="Loading">
+        <div className="player-center player-center-busy" aria-label={t("player.loading")}>
           <LoaderCircle className="spin" />
         </div>
       )}
       {!error && !waiting && !playing && (
-        <button className="player-center" aria-label="Play" onClick={togglePlayback}>
+        <button className="player-center" aria-label={t("player.play")} onClick={togglePlayback}>
           <Play />
         </button>
       )}
@@ -3108,13 +3167,13 @@ export function Player({
           and .player-controls is a stacking context it cannot escape. */}
       {subtitleOpen && (
         <div className="subtitle-screen">
-          <div className="subtitle-screen-title">Subtitles</div>
+          <div className="subtitle-screen-title">{t("player.subtitles")}</div>
           <div className="subtitle-tabs" role="tablist">
             {(
               [
-                ["choice", "Subtitles"],
-                ["language", "Language"],
-                ...(onPlayerSetting ? [["style", "Style"]] : []),
+                ["choice", t("player.subtitles")],
+                ["language", t("player.language")],
+                ...(onPlayerSetting ? [["style", t("player.style")]] : []),
               ] as [typeof subtitleTab, string][]
             ).map(([id, label]) => (
               <button
@@ -3134,7 +3193,7 @@ export function Player({
                 className={`subtitle-language${subtitleLanguageFilter === null ? " selected" : ""}`}
                 onClick={() => setSubtitleLanguageFilter(null)}
               >
-                <span>All</span>
+                <span>{t("player.all")}</span>
               </button>
               {subtitleLanguages.map((language) => (
                 <button
@@ -3190,7 +3249,7 @@ export function Player({
                 className={`subtitle-option${selectedSubtitle === -1 ? " selected" : ""}`}
                 onClick={() => selectSubtitle(-1)}
               >
-                <span className="subtitle-option-language">None</span>
+                <span className="subtitle-option-language">{t("player.none")}</span>
               </button>
               {shownSubtitleOptions.map((option) => (
                 <button
@@ -3213,7 +3272,7 @@ export function Player({
                 </button>
               ))}
               {!addonSubtitlesAsked && subtitleOptions.length === 0 && (
-                <p className="subtitle-note">Asking your addons…</p>
+                <p className="subtitle-note">{t("player.askingAddons")}</p>
               )}
               {subtitlesPending && (
                 <p className="subtitle-note">
@@ -3225,14 +3284,14 @@ export function Player({
               {addonSubtitlesAsked &&
                 !subtitlesPending &&
                 subtitleOptions.length === 0 && (
-                  <p className="subtitle-note">Nothing found for this one.</p>
+                  <p className="subtitle-note">{t("player.nothingFound")}</p>
                 )}
             </div>
           </div>
         </div>
       )}
       {audioOpen && (
-        <PlayerDrawer eyebrow="AUDIO" title="Language and track" onClose={() => setAudioOpen(false)}>
+        <PlayerDrawer eyebrow={t("player.audio").toUpperCase()} title={t("player.audioTitle")} onClose={() => setAudioOpen(false)}>
           {audioOptions.length ? (
             <div className="track-rail player-drawer-list">
               {audioOptions.map((track) => (
@@ -3251,6 +3310,22 @@ export function Player({
           ) : (
             <p className="player-drawer-note">The browser reports only the default track.</p>
           )}
+          {(proxiedPlayback || remuxActive) && !nativePlayer && (
+            <label className="player-drawer-toggle">
+              <span>
+                <strong>{t("player.stableVolume")}</strong>
+                <small>{t("player.stableVolumeHint")}</small>
+              </span>
+              <span className="switch">
+                <input
+                  type="checkbox"
+                  checked={stableVolume}
+                  onChange={(event) => setStableVolume(event.target.checked)}
+                />
+                <i />
+              </span>
+            </label>
+          )}
           {riskyAudio && (
             <small className="player-drawer-note">
               This source advertises an audio/container format that
@@ -3267,12 +3342,12 @@ export function Player({
       )}
       {pausedInfo && (
         <div className="player-paused-info" aria-live="polite">
-          <small>You're watching</small>
+          <small>{t("player.youreWatching")}</small>
           <strong>{meta.name}</strong>
           {video && (
             <span>
               {video.season != null && video.episode != null
-                ? `Season ${video.season}: Episode ${video.episode} · `
+                ? `${t("player.seasonEpisode", { season: video.season, episode: video.episode })} · `
                 : ""}
               {video.title}
             </span>
@@ -3283,7 +3358,7 @@ export function Player({
         </div>
       )}
       {speedOpen && (
-        <PlayerDrawer eyebrow="SPEED" title="Playback speed" onClose={() => setSpeedOpen(false)}>
+        <PlayerDrawer eyebrow={t("player.speed").toUpperCase()} title={t("player.playbackSpeed")} onClose={() => setSpeedOpen(false)}>
           <div className="track-rail player-drawer-list">
             {PLAYBACK_RATES.map((rate) => (
               <button
@@ -3294,7 +3369,7 @@ export function Player({
                   setSpeedOpen(false);
                 }}
               >
-                <span className="track-item-main">{rate === 1 ? "Normal" : `${rate}×`}</span>
+                <span className="track-item-main">{rate === 1 ? t("player.speedNormal") : `${rate}×`}</span>
               </button>
             ))}
           </div>
@@ -3344,7 +3419,7 @@ export function Player({
             </span>
           )}
           <input
-            aria-label="Seek"
+            aria-label={t("player.seek")}
             type="range"
             min="0"
             max={seekLimit}
@@ -3390,8 +3465,8 @@ export function Player({
             </button>
             <button
               className="player-seek-step"
-              aria-label="Back 10 seconds"
-              title="Back 10 seconds (←)"
+              aria-label={t("player.back10")}
+              title={`${t("player.back10")} (←)`}
               onClick={() => seekStep(-10)}
             >
               <RotateCcw />
@@ -3399,8 +3474,8 @@ export function Player({
             </button>
             <button
               className="player-seek-step"
-              aria-label="Forward 10 seconds"
-              title="Forward 10 seconds (→)"
+              aria-label={t("player.forward10")}
+              title={`${t("player.forward10")} (→)`}
               onClick={() => seekStep(10)}
             >
               <RotateCw />
@@ -3426,8 +3501,8 @@ export function Player({
                 the control is knowing what the frame is currently doing. */}
             <button
               className="player-aspect"
-              aria-label={`Aspect ratio: ${aspectMode}. Change`}
-              title={`Aspect ratio: ${aspectMode}`}
+              aria-label={`${t("player.pictureMode", { mode: aspectMode })}. Change`}
+              title={t("player.pictureMode", { mode: aspectMode })}
               onClick={() => {
                 showControls();
                 setAspectMode((current) => {
@@ -3467,7 +3542,7 @@ export function Player({
                   <div className="player-brightness-panel">
                     <input
                       className="volume-slider"
-                      aria-label="Brightness"
+                      aria-label={t("player.brightness")}
                       type="range"
                       // Lifting only, which is what a dark grade needs. Going
                       // the other way would dim the subtitles with the
@@ -3514,7 +3589,7 @@ export function Player({
             </button>
             <input
               className="volume-slider"
-              aria-label="Volume"
+              aria-label={t("player.volume")}
               type="range"
               min="0"
               max="1"
@@ -3535,7 +3610,7 @@ export function Player({
               <div className="audio-picker">
                 <button
                   className={subtitleOpen ? "active" : ""}
-                  aria-label="Subtitles"
+                  aria-label={t("player.subtitles")}
                   aria-expanded={subtitleOpen}
                   onClick={() => {
                     setAudioOpen(false);
@@ -3552,7 +3627,7 @@ export function Player({
               <div className="audio-picker">
                 <button
                   className={sourcesOpen ? "active" : ""}
-                  aria-label="Sources"
+                  aria-label={t("player.sources")}
                   aria-expanded={sourcesOpen}
                   onClick={openSources}
                 >
@@ -3563,7 +3638,7 @@ export function Player({
             <div className="audio-picker">
               <button
                 className={audioOpen ? "active" : ""}
-                aria-label="Audio"
+                aria-label={t("player.audio")}
                 aria-expanded={audioOpen}
                 onClick={() => {
                   setSubtitleOpen(false);
@@ -3590,7 +3665,7 @@ export function Player({
             )}
             {!!episodes?.length && onPlayEpisode && (
               <button
-                aria-label="Episodes"
+                aria-label={t("player.episodes")}
                 className={episodesOpen ? "active" : ""}
                 aria-expanded={episodesOpen}
                 onClick={() => {
@@ -3601,7 +3676,7 @@ export function Player({
                 <List />
               </button>
             )}
-            <button aria-label="Fullscreen" onClick={toggleFullscreen}>
+            <button aria-label={t("player.fullscreen")} onClick={toggleFullscreen}>
               <Maximize />
             </button>
           </div>
@@ -3621,7 +3696,7 @@ export function Player({
       {showNextEpisode && nextEpisode && (
         <div className="player-next">
           <div>
-            <small>{nextCountdown != null ? `Playing in ${nextCountdown}…` : "Up next"}</small>
+            <small>{nextCountdown != null ? t("player.playingIn", { seconds: nextCountdown }) : t("player.upNext")}</small>
             <strong>
               {nextEpisode.season != null && nextEpisode.episode != null
                 ? `S${nextEpisode.season}·E${nextEpisode.episode} `
@@ -3629,7 +3704,7 @@ export function Player({
               {nextEpisode.title || "Next episode"}
             </strong>
           </div>
-          <button onClick={() => setNextDismissed(true)}>Not now</button>
+          <button onClick={() => setNextDismissed(true)}>{t("player.notNow")}</button>
           <button
             className={`primary${nextCountdown != null ? " is-counting" : ""}`}
             disabled={switching}
@@ -3644,9 +3719,9 @@ export function Player({
            it: same rows, same watched eye, same resume bar, and the same
            season picker rather than every season run together with the
            specials among them. */
-        <PlayerDrawer eyebrow="EPISODES" title={meta.name} onClose={() => setEpisodesOpen(false)}>
+        <PlayerDrawer eyebrow={t("player.episodes").toUpperCase()} title={meta.name} onClose={() => setEpisodesOpen(false)}>
             <label className="season-select-wrap">
-              <span>SEASON</span>
+              <span>{t("player.season").toUpperCase()}</span>
               <Select
                 value={season ?? ""}
                 onChange={(event) => setSeason(Number(event.target.value))}

@@ -10268,3 +10268,23 @@ html.native-player-active .player-view.native-player.native-player-loading {
     width: 120px;
   }
 }
+
+.player-drawer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 16px 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #ffffff0d;
+  cursor: pointer;
+}
+.player-drawer-toggle strong {
+  display: block;
+  font-size: 14px;
+}
+.player-drawer-toggle small {
+  color: #8d97a2;
+  font-size: 12px;
+}
