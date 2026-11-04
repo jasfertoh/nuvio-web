@@ -191,6 +191,8 @@ import {
 import { readDebridRules } from "./lib/webSettings";
 import { applyDebridStreamSettings } from "./lib/debridStreams";
 import { continuationOrder, pickBingeCandidates } from "./lib/nextEpisode";
+import { mediaProxyBase } from "./lib/mediaProxy";
+import { SUBTITLE_FONTS, SUBTITLE_FONT_KEYS } from "./lib/subtitleFonts";
 import { fetchProxyTracks } from "./lib/proxyTracks";
 import {
   canResolveDebrid,
@@ -296,7 +298,9 @@ const INTEGRATION_PAGES: Array<{
   {
     key: "connected",
     label: "Connected Services",
-    description: "Debrid accounts — not available on the web",
+    // This build reaches Torbox through its media proxy, which a plain
+    // upstream web build has no way to do.
+    description: "Torbox, through the media proxy",
   },
 ];
 
@@ -5001,7 +5005,30 @@ function SettingsPage({
               }
             />
           ))}
-          {!platform.debrid && (
+          {/* This build has a media proxy that calls Torbox from a server, where
+              its missing cross-origin headers do not matter - so the key is
+              worth holding: it is what turns a torrent into something playable. */}
+          {!platform.debrid && mediaProxyBase() && (
+            <SettingToggle
+              title="Resolve playable links"
+              description="Ask Torbox for a playable link when a source is only a torrent. Off, those sources cannot be played here at all."
+              checked={settings.player.debridEnabled}
+              disabled={!settingsReady}
+              onChange={(next) =>
+                onTypedSetting("player_settings", "debrid_enabled", "boolean", next)
+              }
+            />
+          )}
+          {!platform.debrid && mediaProxyBase() && (
+            <IntegrationCredentialField
+              label="Torbox API key"
+              description="Resolved through your media proxy, since a browser cannot call Torbox directly."
+              value={providerCredential(providerCredentials, "debrid:torbox", "api_key")}
+              ready={credentialsReady}
+              onSave={(value) => onProviderCredential("debrid:torbox", value)}
+            />
+          )}
+          {!platform.debrid && !mediaProxyBase() && (
           /* Stated plainly rather than offered and broken. Torbox sends no
               cross-origin headers at all, so a browser cannot reach its API —
               not the account linking, not the library, not link resolving.
@@ -5863,6 +5890,47 @@ function SettingsPage({
                   event.target.value,
                 )
               }
+            />
+          </label>
+        </div>
+        <label className="setting-select-row">
+          <span>
+            <strong>Subtitle font</strong>
+            <small>Faces the browser already has, so nothing is fetched to show a line of dialogue.</small>
+          </span>
+          <Select
+            value={settings.player.subtitleFontFamily}
+            disabled={!settingsReady}
+            onChange={(event) =>
+              onTypedSetting("player_settings", "subtitle_font_family", "string", event.target.value)
+            }
+          >
+            {SUBTITLE_FONT_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {SUBTITLE_FONTS[key].label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <div className="setting-grid subtitle-grid">
+          <label>
+            <span>Line spacing (px, −12 to 24)</span>
+            <input
+              type="number"
+              min="-12"
+              max="24"
+              value={settings.player.subtitleLineSpacing}
+              disabled={!settingsReady}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (!Number.isFinite(next)) return;
+                onTypedSetting(
+                  "player_settings",
+                  "subtitle_line_spacing",
+                  "int",
+                  Math.max(-12, Math.min(24, Math.round(next))),
+                );
+              }}
             />
           </label>
         </div>
