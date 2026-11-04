@@ -1,0 +1,34 @@
+# Serves the built PWA. TLS and hostname routing happen upstream (a Cloudflare
+# tunnel in front of the stack's own Caddy), so this listens plainly on :80.
+:80 {
+	root * /srv
+	encode zstd gzip
+	header -Server
+
+	# Asset filenames carry a content hash, so a given URL never changes body.
+	# These are deliberately outside the shell fallback below: after a deploy a
+	# browser holding an older shell asks for a script that no longer exists,
+	# and answering that with index.html hands it HTML where it expects
+	# JavaScript - which surfaces only as a parse error against a blank page.
+	# A plain 404 is what lets the service worker notice and fetch the update.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# The shell, the service worker, the manifest, and every client-side route
+	# that falls back to the shell. Together these decide which build a
+	# returning visitor gets, so none of them may be held.
+	handle {
+		header Cache-Control "no-cache"
+		# Cloudflare applies its own TTL and ignores Cache-Control here. These
+		# are the headers it documents as overriding that - though a Cache Rule
+		# with an explicit Edge TTL still wins over both.
+		header CDN-Cache-Control "no-store"
+		header Cloudflare-CDN-Cache-Control "no-store"
+
+		# Deep links (/movie/{id}) are routes with no file behind them.
+		try_files {path} /index.html
+		file_server
+	}
+}
