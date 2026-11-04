@@ -37,7 +37,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { Fragment, type CSSProperties, type ReactNode, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, type CSSProperties, type ReactNode, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen";
 import { ContinueWatching } from "./components/ContinueWatching";
 import { ContextMenu } from "./components/ContextMenu";
@@ -53,7 +53,11 @@ import {
   CollectionRow,
 } from "./components/Collections";
 import { Hero, MediaRow, PosterCard } from "./components/Media";
-import { Player } from "./components/Player";
+// Its own chunk: the player is most of a megabyte of startup code that the
+// home screen never runs. Fetched once home is up (see below), so pressing play
+// does not wait on it either.
+const loadPlayerModule = () => import("./components/Player");
+const Player = lazy(() => loadPlayerModule().then((module) => ({ default: module.Player })));
 import { setBootSplashVisible } from "./lib/bootSplash.ts";
 import { PlaybackPolicySettings } from "./components/PlaybackPolicySettings";
 import { FusionBadgeSettings } from "./components/FusionBadgeSettings";
@@ -719,6 +723,13 @@ export function App() {
    */
   const starting =
     booting || (session !== null && !profilesSettled) || profileStarting;
+  // Once the app is up, fetch the player's code in the idle time after it,
+  // so it is already here when something is played.
+  useEffect(() => {
+    if (starting) return;
+    const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1500));
+    idle(() => void loadPlayerModule().catch(() => {}));
+  }, [starting]);
   useEffect(() => {
     setBootSplashVisible(starting, 420);
   }, [starting]);
@@ -789,8 +800,25 @@ export function App() {
     setProfile(next);
   }, []);
   useEffect(() => {
+    performance.mark("nuvio:restore-start");
     restoreSession()
       .then((value) => {
+        // Startup milestones, readable with performance.getEntriesByType("mark").
+        performance.mark("nuvio:session");
+        // The remembered profile's addons and layout are asked for now, beside
+        // the profile list, instead of after it: each is a ~250ms round trip to
+        // the account backend, and they do not depend on each other.
+        // loadProfileData takes them if it opens that same profile.
+        const remembered = Number(localStorage.getItem("nuvio-active-profile") ?? 0);
+        if (value && remembered > 0) {
+          startupPrefetch.current = {
+            profileIndex: remembered,
+            addons: loadAddons(remembered),
+            layout: loadHomeLayout(remembered).catch(() => null),
+          };
+          // Unwanted ones must not surface as unhandled rejections.
+          startupPrefetch.current.addons.catch(() => {});
+        }
         setSession(value);
       })
       .finally(() => setBooting(false));
@@ -928,6 +956,11 @@ export function App() {
     [profiles],
   );
   const hydrateRef = useRef<(() => Promise<void>) | null>(null);
+  const startupPrefetch = useRef<{
+    profileIndex: number;
+    addons: Promise<AddonRow[]>;
+    layout: Promise<HomeLayout | null>;
+  } | null>(null);
   const hydrate = useCallback(async () => {
     const hydrationGeneration = ++accountHydrationGeneration.current;
     setProfilesSettled(false);
@@ -945,6 +978,7 @@ export function App() {
         loadProfiles(),
         loadAvatarCatalog().catch(() => []),
       ]);
+      performance.mark("nuvio:profiles");
       const avatarUrls = new Map(
         avatars.map((item) => [item.id, item.imageUrl]),
       );
@@ -1062,27 +1096,54 @@ export function App() {
       // The critical path: addons and the layout that orders them. The layout
       // is one small request and decides which catalogs are fetched at all, so
       // it is worth waiting for rather than reordering afterwards.
+      // Started at session restore for the remembered profile; used once.
+      const prefetched = startupPrefetch.current;
+      startupPrefetch.current = null;
       const [rows, nextLayout] = await Promise.all([
         // A mirroring profile's addons live on profile 1, not under its own id.
-        loadAddons(addonProfileIndex),
-        loadHomeLayout(profileIndex).catch(() => null),
+        prefetched?.profileIndex === addonProfileIndex
+          ? prefetched.addons
+          : loadAddons(addonProfileIndex),
+        prefetched?.profileIndex === profileIndex
+          ? prefetched.layout
+          : loadHomeLayout(profileIndex).catch(() => null),
       ]);
       if (!isCurrent()) {
         return;
       }
+      performance.mark("nuvio:addon-rows");
       setAddonRows(rows);
       setHomeLayout(nextLayout);
-      const installed = await loadInstalledAddons(rows);
+      const installed = await loadInstalledAddons(rows, { cached: true });
       if (!isCurrent()) return;
       setAddons(installed);
       hydratedProfileIndexRef.current = profileIndex;
-      // Rows appear as each catalog lands instead of after every addon has
-      // answered, which is what left the page blank on a slow connection.
-      setSections([]);
+      // The rows from last time, shown at once while this visit's are fetched:
+      // asking every addon for its catalogs is seconds of third-party round
+      // trips, and the splash used to wait for the first of them.
+      const homeCacheKey = `home-sections:${profileIndex}`;
+      const remembered = await platform.storage
+        .get<CatalogSection[]>(homeCacheKey)
+        .catch(() => null);
+      if (!isCurrent()) return;
+      const showingRemembered = !!remembered?.length;
+      performance.mark("nuvio:home-ready");
+      if (showingRemembered) {
+        setSections(remembered!);
+        setLoading(false);
+        setProfileStarting(false);
+      } else {
+        // Rows appear as each catalog lands instead of after every addon has
+        // answered, which is what left the page blank on a slow connection.
+        setSections([]);
+      }
       const home = await loadHome(
         installed,
         (section) => {
           if (!isCurrent()) return;
+          // Over remembered rows the fresh ones are swapped in together at
+          // the end, rather than the page emptying and refilling.
+          if (showingRemembered) return;
           setSections((current) => [...current, section]);
           // The first row on screen is the end of "loading". Everything after
           // this fills in behind a page you can already use.
@@ -1092,6 +1153,13 @@ export function App() {
         nextLayout,
       );
       if (!isCurrent()) return;
+      if (showingRemembered && home.sections.length) setSections(home.sections);
+      if (home.sections.length) {
+        // Without the full first page, which only the catalog page wants.
+        void platform.storage
+          .set(homeCacheKey, home.sections.map(({ page: _page, ...section }) => section))
+          .catch(() => {});
+      }
       // No catalog returned anything, so nothing will clear it above.
       setLoading(false);
       setProfileStarting(false);
@@ -2675,6 +2743,7 @@ export function App() {
         /* An overlay rather than an early return: unmounting the shell to show
            the player threw away the resolved detail page, so closing it
            rebuilt home from scratch and only then re-opened details. */
+        <Suspense fallback={<div className="player-view" />}>
         <Player
           {...playback}
           addons={addons}
@@ -2792,6 +2861,7 @@ export function App() {
             )
           }
         />
+        </Suspense>
       )}
       {titleMenu && (() => {
         const present = library.some(

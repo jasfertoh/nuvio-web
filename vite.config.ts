@@ -76,6 +76,32 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      {
+        // Opens the connection to the account backend and the media proxy
+        // while the app's code is still downloading. Through the tunnel a cold
+        // connection measured ~530ms of connect and TLS before the first byte,
+        // and startup's first request (restoring the session) waited on it.
+        // crossorigin, because those requests are CORS fetches.
+        name: "nuvio-preconnect",
+        transformIndexHtml(html: string) {
+          const origins = [
+            env.VITE_NUVIO_SUPABASE_URL || env.NUVIO_SUPABASE_URL,
+            env.VITE_NUVIO_MEDIA_PROXY_URL || env.NUVIO_MEDIA_PROXY_URL,
+          ]
+            .map((value) => {
+              try {
+                return value ? new URL(value).origin : "";
+              } catch {
+                return "";
+              }
+            })
+            .filter((origin, index, all) => origin && all.indexOf(origin) === index);
+          const links = origins
+            .map((origin) => `    <link rel="preconnect" href="${origin}" crossorigin />`)
+            .join("\n");
+          return links ? html.replace("</head>", `${links}\n  </head>`) : html;
+        },
+      },
       VitePWA({
         // A shell is not a web page and has no business precaching itself.
         // Worse, this one waits to be prompted before taking an update, so a

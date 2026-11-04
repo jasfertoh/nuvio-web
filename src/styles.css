@@ -1,11 +1,15 @@
+/* WOFF2: 35KB each, against 88KB as TTF. swap, so text is drawn at once in
+   the fallback rather than held invisible while the face loads. */
 @font-face {
   font-family: Nuvio;
-  src: url("./assets/jetbrains_sans_regular.ttf");
+  src: url("./assets/jetbrains_sans_regular.woff2") format("woff2");
+  font-display: swap;
 }
 @font-face {
   font-family: Nuvio;
-  src: url("./assets/jetbrains_sans_bold.ttf");
+  src: url("./assets/jetbrains_sans_bold.woff2") format("woff2");
   font-weight: 700;
+  font-display: swap;
 }
 /* The Netflix-style subtitle preset's face (Inter, SIL OFL - public/fonts/inter-LICENSE.txt).
    Only downloaded once something uses the family. */

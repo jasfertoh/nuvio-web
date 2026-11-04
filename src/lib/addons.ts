@@ -448,20 +448,69 @@ function explainAddonFailure(url: string, error: unknown): string {
   return message;
 }
 
+const MANIFEST_CACHE_KEY = "addon-manifests";
+/** A manifest older than this is fetched before use rather than after. */
+const MANIFEST_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+type ManifestCache = Record<string, { manifest: AddonManifest; at: number }>;
+
+async function readManifestCache(): Promise<ManifestCache> {
+  try {
+    return ((await platform.storage.get(MANIFEST_CACHE_KEY)) as ManifestCache | null) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeManifests(fresh: Record<string, AddonManifest>) {
+  if (!Object.keys(fresh).length) return;
+  const cache = await readManifestCache();
+  const now = Date.now();
+  for (const [url, manifest] of Object.entries(fresh)) cache[url] = { manifest, at: now };
+  await platform.storage.set(MANIFEST_CACHE_KEY, cache).catch(() => {});
+}
+
+/**
+ * Every installed addon with its manifest.
+ *
+ * `cached` (startup) answers from the manifests remembered last time and
+ * refreshes them behind the page, for next time: a manifest changes when an
+ * addon is reconfigured, which is rare, while asking every addon host for one
+ * on each visit was a round trip to each before the home screen could start.
+ * One not remembered, or older than a day, is fetched first as before.
+ */
 export async function loadInstalledAddons(
   rows: AddonRow[],
+  { cached = false }: { cached?: boolean } = {},
 ): Promise<InstalledAddon[]> {
-  return Promise.all(
+  const remembered = cached ? await readManifestCache() : {};
+  const fresh: Record<string, AddonManifest> = {};
+  const fetchRow = async (row: AddonRow): Promise<InstalledAddon> => {
+    try {
+      const url = normalizeManifestUrl(row.url);
+      const manifest = await fetchJson<AddonManifest>(url);
+      fresh[url] = manifest;
+      return { ...row, url, name: manifest.name || row.name, manifest };
+    } catch (error) {
+      return { ...row, error: explainAddonFailure(row.url, error) };
+    }
+  };
+  const background: AddonRow[] = [];
+  const result = await Promise.all(
     rows.map(async (row) => {
-      try {
-        const url = normalizeManifestUrl(row.url);
-        const manifest = await fetchJson<AddonManifest>(url);
-        return { ...row, url, name: manifest.name || row.name, manifest };
-      } catch (error) {
-        return { ...row, error: explainAddonFailure(row.url, error) };
+      const url = normalizeManifestUrl(row.url);
+      const hit = remembered[url];
+      if (hit && Date.now() - hit.at < MANIFEST_CACHE_MAX_AGE_MS) {
+        background.push(row);
+        return { ...row, url, name: hit.manifest.name || row.name, manifest: hit.manifest };
       }
+      return fetchRow(row);
     }),
   );
+  if (background.length) {
+    // For next time; this visit already has what it needs.
+    void Promise.all(background.map(fetchRow)).then(() => writeManifests(fresh));
+  } else void writeManifests(fresh);
+  return result;
 }
 
 /** Home catalogs fetched at once, across every addon. */
