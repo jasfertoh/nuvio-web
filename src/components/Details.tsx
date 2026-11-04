@@ -589,14 +589,51 @@ export function Details({
    */
   const activeAddon =
     sourceAddon && sourceAddons.includes(sourceAddon) ? sourceAddon : "";
+  /**
+   * Which torrents Torbox already holds, by hash. One it does not hold cannot
+   * be streamed at all - resolving it only queues a download - so it is not
+   * offered, as the fork did. Unasked hashes are shown while the check runs.
+   */
+  const [cachedHashes, setCachedHashes] = useState<Record<string, boolean>>({});
+  const cachedHashesRef = useRef(cachedHashes);
+  cachedHashesRef.current = cachedHashes;
+  const knownUncached = (stream: Stream) =>
+    needsDebridResolve(stream) &&
+    cachedHashes[String(stream.infoHash || "").toLowerCase()] === false;
+  useEffect(() => {
+    if (!sourceOpen || !canResolveDebrid(providerCredentials)) return;
+    const unknown = streams.filter(
+      (stream) =>
+        needsDebridResolve(stream) &&
+        !(String(stream.infoHash || "").toLowerCase() in cachedHashesRef.current),
+    );
+    if (!unknown.length) return;
+    let live = true;
+    // Asked per batch as the addons answer; hashes already answered are not
+    // asked again.
+    void checkDebridCached(unknown, providerCredentials)
+      .then((answers) => {
+        if (live) setCachedHashes((known) => ({ ...known, ...answers }));
+      })
+      .catch(() => {
+        // Not being able to check is not evidence that anything is missing.
+      });
+    return () => {
+      live = false;
+    };
+  }, [sourceOpen, streams, providerCredentials]);
   const visibleStreams = useMemo(() => {
     // The browser plays through the proxy, which cannot show Dolby Vision and
     // pays for 4K twice, so 2160p is not offered there; native shells keep it.
-    const offered = platform.debrid ? streams : streams.filter(offeredInBrowser);
+    const offered = (platform.debrid ? streams : streams.filter(offeredInBrowser)).filter(
+      (stream) => !knownUncached(stream),
+    );
     return activeAddon
       ? offered.filter((item) => item.addonName === activeAddon)
       : offered;
-  }, [streams, activeAddon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streams, activeAddon, cachedHashes]);
+  const hiddenUncachedCount = streams.filter(knownUncached).length;
   /** Where this would resume from, which is the useful thing to say up here. */
   const sourceResume = useMemo(() => {
     const row = watchIndex.progress.get(
@@ -1162,6 +1199,8 @@ export function Details({
     setSourcesPending(true);
     setAnswered([]);
     setStreams([]);
+    // Asked afresh each time the sheet opens: a torrent can finish caching.
+    setCachedHashes({});
     // Autoplay picks once every addon has answered even with no timer set;
     // the timer, when there is one, only lets it pick sooner.
     const autoplay = !forceManual && playerSettings.autoPlayMode !== "MANUAL";
@@ -1183,7 +1222,10 @@ export function Details({
         addons.map((addon) => addon.manifest?.name || addon.name || ""),
         bingeGroupFor(meta.id),
         false,
-        (stream) => Boolean(stream.url || stream.externalUrl) || canResolve(stream),
+        (stream) =>
+          Boolean(stream.url || stream.externalUrl) ||
+          (canResolve(stream) &&
+            cachedHashesRef.current[String(stream.infoHash || "").toLowerCase()] !== false),
       );
       if (!choice) {
         // Every addon has answered and nothing fits the autoplay rules: hand
@@ -1891,6 +1933,13 @@ export function Details({
               </button>
             </header>
             {downloadNote && <div className="sheet-note">{downloadNote}</div>}
+            {hiddenUncachedCount > 0 && (
+              <div className="sheet-note">
+                {hiddenUncachedCount === 1
+                  ? "1 source Torbox doesn't have is hidden."
+                  : `${hiddenUncachedCount} sources Torbox doesn't have are hidden.`}
+              </div>
+            )}
             {autoMissed && !autoStage && (
               <div className="sheet-note">{t("autoplay.noMatch")}</div>
             )}
