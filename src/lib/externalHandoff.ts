@@ -73,9 +73,9 @@ export function clearExternalHandoff() {
 /**
  * What the other player reported on its way back.
  *
- * Only Outplayer says anything: its x-success and x-cancel callbacks reopen us
- * with the outcome, and x-cancel appends where it stopped and how long the
- * video was. That is exactly what the prompt would otherwise have to ask, so
+ * Only Outplayer and Lenna say anything: their callbacks reopen us with the
+ * outcome, and the one fired on closing appends where it stopped and how long
+ * the video was. That is exactly what the prompt would otherwise have to ask, so
  * when this is present the prompt is skipped and the position simply saved.
  */
 export type ExternalPlayerReport =

@@ -356,6 +356,10 @@ export type PlayerProps = {
   settings: WebPlayerSettings;
 };
 
+
+/** How long the controls and cursor stay up after the last movement while playing. */
+const CONTROLS_HIDE_MS = 2000;
+
 export function Player({
   stream,
   meta,
@@ -412,6 +416,11 @@ export function Player({
   const [nativeRefused, setNativeRefused] = useState(false);
 
   const [playing, setPlaying] = useState(false);
+  /** Whether this stream has played at all, so the first wait can be named. */
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    if (playing) setStarted(true);
+  }, [playing]);
   const playingRef = useRef(false);
   playingRef.current = playing;
   const [waiting, setWaiting] = useState(true);
@@ -830,8 +839,20 @@ export function Player({
         setExternalPlayerOpen(false);
         setSourcesOpen(false);
         setControlsVisible(false);
-      }, 3000);
+      }, CONTROLS_HIDE_MS);
   }, []);
+  // The countdown above only starts if playback is already running when it
+  // is asked. Resuming with Space, or the native player starting on its own,
+  // turns playback on *after* that, so nothing ever hid the controls or the
+  // cursor until the mouse moved again. Restart it whenever playback starts;
+  // a pause brings the controls back and holds them.
+  useEffect(() => {
+    if (playing) showControls();
+    else {
+      window.clearTimeout(hideTimer.current);
+      setControlsVisible(true);
+    }
+  }, [playing, showControls]);
   const togglePlayback = useCallback(async () => {
     showControls();
     if (nativePlayer) {
@@ -2461,6 +2482,10 @@ export function Player({
       {!error && waiting && settings.showLoadingOverlay && (
         <div className="player-center player-center-busy" aria-label="Loading">
           <LoaderCircle className="spin" />
+          {/* The last of the steps the source sheet shows while autoplay
+              chooses, so the hand-off reads as one sequence. Only before the
+              first frame: a buffering pause later is not a start. */}
+          {!started && <span className="player-starting">{t("player.startingStream")}</span>}
         </div>
       )}
       {/* Paused only. A pause glyph held over a playing picture is furniture:

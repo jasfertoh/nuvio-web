@@ -190,7 +190,12 @@ export type CatalogSection = {
   manifestUrl: string;
   addonName: string;
   catalogId: string;
+  /** What a home row shows: the head of the first page. */
   items: Meta[];
+  /** The whole first page, for the catalog page to start from. */
+  page?: Meta[];
+  /** How many titles the addon sent for that page, which is where page two starts. */
+  fetched?: number;
 };
 export type Stream = {
   name: string;
@@ -291,6 +296,7 @@ export type ExternalPlayerMode =
   | "mpv"
   | "android-chooser"
   | "outplayer"
+  | "lenna"
   | "infuse"
   | "iina"
   | "m3u";

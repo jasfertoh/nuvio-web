@@ -1,9 +1,9 @@
 import { resolveTmdbSource } from "./tmdbCollections";
 import {
+  createHostCooldown,
   createHostLimiter,
   hostKey,
-  isRetryable,
-  retryAfterMs,
+  shouldRetry,
   runPool,
   MAX_RETRIES,
 } from "./requestPolicy.ts";
@@ -56,6 +56,23 @@ export function addonConfigureUrl(manifestUrl: string): string {
 
 /** Shared by every addon request, so the whole app counts as one caller. */
 const limitPerHost = createHostLimiter();
+const cooldown = createHostCooldown();
+
+/**
+ * Requests already on their way, so two parts of the app asking for the same
+ * title at once — Continue Watching and the calendar, say — share one.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Title metadata already fetched this session. Continue Watching and the
+ * calendar each resolved every title they show on every load, one request
+ * apiece, and that is what an addon like AIOMetadata rate limits.
+ */
+const META_TTL_MS = 30 * 60_000;
+const META_CACHE_LIMIT = 600;
+const metaCache = new Map<string, { at: number; value: unknown }>();
+const isMetaUrl = (url: string) => /\/meta\/[^/]+\/[^/]+\.json$/.test(new URL(url).pathname);
 
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -111,33 +128,63 @@ async function fetchJson<T>(
   debug?: { trace: import("./detailsDebug").DetailsTrace; label: string },
 ): Promise<T> {
   safeAddonUrl(url);
+  const cacheable = isMetaUrl(url);
+  if (cacheable) {
+    const hit = metaCache.get(url);
+    if (hit && Date.now() - hit.at < META_TTL_MS) return hit.value as T;
+  }
+  // A caller with its own abort signal or a debug trace gets its own request:
+  // sharing would let one caller's cancel or timings leak into another's.
+  if (signal || debug) return fetchJsonQueued<T>(url, timeoutMs, signal, debug);
+  const pending = inFlight.get(url);
+  if (pending) return pending as Promise<T>;
+  const request = fetchJsonQueued<T>(url, timeoutMs).then((value) => {
+    if (cacheable) {
+      if (metaCache.size >= META_CACHE_LIMIT)
+        metaCache.delete(metaCache.keys().next().value!);
+      metaCache.set(url, { at: Date.now(), value });
+    }
+    return value;
+  });
+  inFlight.set(url, request);
+  void request.then(
+    () => inFlight.delete(url),
+    () => inFlight.delete(url),
+  );
+  return request;
+}
+
+async function fetchJsonQueued<T>(
+  url: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+  debug?: { trace: import("./detailsDebug").DetailsTrace; label: string },
+): Promise<T> {
   const queued = debug?.trace.start(`${debug.label}: host queue`);
   return limitPerHost(url, async () => {
     queued?.();
     for (let attempt = 0; ; attempt += 1) {
+      // The host's shared back-off, if it has refused recently: this request
+      // waits with everyone else's rather than earning another 429.
+      const pause = cooldown.delayFor(url);
+      if (pause > 0) {
+        const backoff = debug?.trace.start(`${debug.label}: host cooling down`);
+        await wait(pause, signal);
+        backoff?.();
+      }
       const finish = debug?.trace.start(`${debug.label}: request ${attempt + 1}`, `${timeoutMs / 1000}s timeout`);
       try {
         const value = await fetchJsonOnce<T>(url, timeoutMs, signal);
         finish?.();
+        cooldown.success(url);
         return value;
       } catch (error) {
         finish?.("error");
-        const status = (error as { status?: number }).status;
-        if (
-          attempt >= MAX_RETRIES ||
-          status === undefined ||
-          !isRetryable(status) ||
-          signal?.aborted
-        )
+        const retryable = shouldRetry(error);
+        if (retryable)
+          cooldown.strike(url, (error as { retryAfter?: string | null }).retryAfter);
+        if (attempt >= MAX_RETRIES || !retryable || signal?.aborted)
           throw error;
-        // The host asked for later, so wait the time it named rather than
-        // trying again straight away and earning another 429.
-        const backoff = debug?.trace.start(`${debug.label}: retry wait`);
-        await wait(
-          retryAfterMs((error as { retryAfter?: string | null }).retryAfter, attempt),
-          signal,
-        );
-        backoff?.();
       }
     }
   });
@@ -537,6 +584,12 @@ export async function loadHome(
       }>(catalogUrl, HOME_CATALOG_TIMEOUT_MS);
       const prefKey = `${addon.manifest!.id}:${catalog.type}:${catalog.id}`;
       const base = catalog.name || catalog.id;
+      const page = (payload.metas ?? [])
+        .map((meta) => mapMeta(meta, addon.url, addon.manifest!.name))
+        .filter(
+          (meta) =>
+            layout?.hideUnreleasedContent !== true || !isKnownFutureRelease(meta),
+        );
       const section = {
         key: prefKey,
         // A row renamed in Nuvio wins outright; otherwise the type suffix
@@ -550,13 +603,9 @@ export async function loadHome(
         manifestUrl: addon.url,
         addonName: addon.manifest!.name,
         catalogId: catalog.id,
-        items: (payload.metas ?? [])
-          .map((meta) => mapMeta(meta, addon.url, addon.manifest!.name))
-          .filter(
-            (meta) =>
-              layout?.hideUnreleasedContent !== true || !isKnownFutureRelease(meta),
-          )
-          .slice(0, 24),
+        items: page.slice(0, 24),
+        page,
+        fetched: payload.metas?.length ?? 0,
       } satisfies CatalogSection;
       if (!section.items.length) return;
       sections.push(section);

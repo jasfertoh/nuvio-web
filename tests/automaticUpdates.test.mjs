@@ -14,8 +14,12 @@ test("web builds install service-worker updates automatically", () => {
   assert.doesNotMatch(app, /UpdateModal|hasUpdate|updatePrompt/);
 });
 
-test("an automatic reload waits for active playback to close", () => {
+test("an automatic reload waits until the app is out of sight and no player is open", () => {
+  // Reloading during ordinary browsing dropped people mid-scroll back at the
+  // profile picker whenever a deploy landed.
   assert.match(update, /querySelector\("\.player-view"\)/);
-  assert.match(update, /new MutationObserver/);
-  assert.match(update, /if \(playerOpen\(\)\) return/);
+  assert.match(update, /document\.visibilityState !== "hidden" \|\| playerOpen\(\)/);
+  assert.match(update, /addEventListener\("visibilitychange", reloadIfUnseen\)/);
+  // An old build that outlives its chunks reloads when one fails to load.
+  assert.match(main, /addEventListener\("vite:preloadError"/);
 });

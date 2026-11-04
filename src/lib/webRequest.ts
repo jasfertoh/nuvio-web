@@ -55,10 +55,18 @@ export async function webRequest(
     // A cross-origin refusal and a dead network are the same opaque TypeError,
     // by design — the browser will not say which. Naming both beats reporting
     // "Failed to fetch" to someone who has just installed an addon.
-    if (error instanceof TypeError)
-      throw new Error(
+    //
+    // Marked, because it is often not a refusal at all: a host that rate
+    // limits, or a gateway that times out, tends to answer without the CORS
+    // header, and the browser reports that 429 or 504 as this same TypeError.
+    // The retry schedule treats it as the "later" it usually is.
+    if (error instanceof TypeError) {
+      const blocked = new Error(
         "Browser blocked this request (usually CORS or network failure).",
-      );
+      ) as Error & { blocked?: boolean };
+      blocked.blocked = true;
+      throw blocked;
+    }
     throw error;
   } finally {
     if (timer != null) clearTimeout(timer);

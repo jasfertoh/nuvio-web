@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Opens a context menu from either a right-click or a touch hold.
@@ -15,6 +15,9 @@ export function useLongPress(onOpen: (x: number, y: number) => void) {
   const timer = useRef<number | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
+  useEffect(() => () => {
+    if (timer.current != null) window.clearTimeout(timer.current);
+  }, []);
 
   const cancel = () => {
     if (timer.current != null) window.clearTimeout(timer.current);

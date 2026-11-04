@@ -12,10 +12,8 @@ import {
 /**
  * Asks what happened after a stream was handed to another player.
  *
- * Nothing reports back from VLC, so a title watched externally would otherwise
- * leave no trace — no resume point, nothing marked watched, and Continue
- * Watching stuck showing an episode you already finished. This is the manual
- * substitute for the progress the internal player reports on its own.
+ * Shown only after the return check finds no usable progress report. Players
+ * such as VLC cannot report progress, so this remains their manual fallback.
  */
 
 /** Minutes from `Video.runtime` (a number) or `Meta.runtime` ("142 min"). */
@@ -141,8 +139,8 @@ export function ExternalWatchPrompt({
         <span className="eyebrow">EXTERNAL PLAYER</span>
         <h2>{video?.title || meta.name}</h2>
         <p>
-          Nothing reports back from an external player, so tell Nuvio what
-          happened and it will sync like any other playback.
+          Your player didn’t report a saved position. Tell Nuvio where you
+          stopped and it will sync like any other playback.
         </p>
         {partial ? (
           <>

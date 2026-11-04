@@ -40,6 +40,17 @@ if (import.meta.env.DEV && "serviceWorker" in navigator) {
     })
     .catch(() => undefined);
 }
+// The update reload waits for the app to be out of sight (see appUpdate.ts),
+// so an old build can still be running after a deploy has removed the code
+// chunks it would load next. When one of those fails to load, reload then —
+// once per minute at most, so a chunk that is genuinely missing cannot loop.
+window.addEventListener("vite:preloadError", (event) => {
+  const last = Number(sessionStorage.getItem("nuvio-chunk-reload") ?? 0);
+  if (Date.now() - last < 60_000) return;
+  sessionStorage.setItem("nuvio-chunk-reload", String(Date.now()));
+  event.preventDefault();
+  window.location.reload();
+});
 lockZoom();
 
 const root = createRoot(document.getElementById("root")!);

@@ -3,16 +3,40 @@ import {
 import {
   memo,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
+import { posterCandidates } from "../lib/posterFallback";
 import { watchKey, type WatchIndex } from "../lib/progress";
 import { useDragScroll } from "../lib/useDragScroll";
 import { useLongPress } from "../lib/useLongPress";
 import type { CatalogSection, Meta } from "../types";
 
 export type MediaMenuHandler = (item: Meta, x: number, y: number) => void;
+
+/**
+ * A poster that falls back rather than breaking: the addon's own image, then
+ * the plain one it names, then Metahub's, then the title's initial. See
+ * `posterCandidates` for why the addon's own image is the one that fails.
+ */
+function PosterImage({ poster, id, name }: { poster?: string; id: string; name: string }) {
+  const candidates = useMemo(() => posterCandidates(poster, id), [poster, id]);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [candidates]);
+  const src = candidates[attempt];
+  if (!src) return <span className="poster-fallback">{name.slice(0, 1)}</span>;
+  return (
+    <img
+      key={src}
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setAttempt((current) => current + 1)}
+    />
+  );
+}
 
 /**
  * Memoised because the grids re-render whenever the watch index changes, and
@@ -56,11 +80,7 @@ export const PosterCard = memo(function PosterCard({
       aria-label={`Open ${item.name}`}
     >
       <span className="poster-image-wrap">
-        {item.poster ? (
-          <img src={item.poster} alt="" loading="lazy" />
-        ) : (
-          <span className="poster-fallback">{item.name.slice(0, 1)}</span>
-        )}
+        <PosterImage poster={item.poster} id={item.id} name={item.name} />
         {watched && (
           <span className="watched-dot">
             <Eye size={15} />

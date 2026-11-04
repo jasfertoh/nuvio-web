@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { infusePlaybackUrl, shortcutReturnUrl } from "../src/lib/externalPlayer.ts";
+import { infusePlaybackUrl, lennaPlaybackUrl, shortcutReturnUrl } from "../src/lib/externalPlayer.ts";
 
 test("Infuse handoff encodes signed stream URLs and a useful filename", () => {
   const result = infusePlaybackUrl(
@@ -51,4 +51,23 @@ test("the Shortcut return address follows wherever the app is served from", () =
       .split("?").slice(1).join("?"),
   );
   assert.equal(bare.get("text"), "webapp://example.com/?nuvio-external=stopped");
+});
+
+test("Lenna starts where you left off and reports back through the relay", () => {
+  const href = lennaPlaybackUrl("https://cdn.example/film.mkv?sig=a&b=c", {
+    positionSeconds: 754.9,
+    subtitleUrl: "https://subs.example/en.srt",
+    returnUrlFor: (query) => `https://relay.example/r/token${query}`,
+  });
+  assert.ok(href.startsWith("lenna://x-callback-url/play?"));
+  const params = new URL(href.replace("lenna://", "https://")).searchParams;
+  assert.equal(params.get("url"), "https://cdn.example/film.mkv?sig=a&b=c");
+  assert.equal(params.get("sub"), "https://subs.example/en.srt");
+  assert.equal(params.get("position"), "754");
+  assert.equal(params.get("x-success"), "https://relay.example/r/token?nuvio-external=stopped");
+  assert.equal(params.get("x-error"), params.get("x-success"));
+  // Without a relay there is nothing to report to, and nothing is promised.
+  const bare = new URL(lennaPlaybackUrl("https://cdn.example/a.mp4").replace("lenna://", "https://")).searchParams;
+  assert.equal(bare.get("x-success"), null);
+  assert.equal(bare.get("position"), "0");
 });

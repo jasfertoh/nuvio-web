@@ -10,8 +10,10 @@ import {
 import type { AddonSearchGroup } from "../lib/addons";
 import type { WatchIndex } from "../lib/progress";
 import { useProgressiveList } from "../lib/useProgressiveList";
+import { useCatalogPaging } from "../lib/useCatalogPaging";
 import type { InstalledAddon, Meta } from "../types";
 import { MediaRow, PosterCard, type MediaMenuHandler } from "./Media";
+import { PagingStatus } from "./PagingStatus";
 
 const ALL_GENRES = "__all__";
 
@@ -62,13 +64,10 @@ export function Discover({
   const [type, setType] = useState<string | null>(null);
   const [catalogKey, setCatalogKey] = useState<string | null>(null);
   const [genre, setGenre] = useState(ALL_GENRES);
-  const [items, setItems] = useState<Meta[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [exhausted, setExhausted] = useState(false);
   const [error, setError] = useState("");
   const [rolling, setRolling] = useState(false);
-  const sentinel = useRef<HTMLDivElement | null>(null);
+  const searching = query.trim().length > 0;
 
   /** The catalogs that actually returned something; the rest are not shown. */
   const foundGroups = useMemo(
@@ -98,73 +97,47 @@ export function Discover({
     return catalog.genreRequired ? catalog.genreOptions[0] : undefined;
   }, [catalog, genre]);
 
+  const paging = useCatalogPaging({
+    loadPage: (offset) =>
+      catalog
+        ? loadDiscoverCatalog(catalog, effectiveGenre, offset)
+        : Promise.resolve([]),
+    enabled: !searching && !loading,
+  });
+  const { items, reset } = paging;
+
+  // Switching catalog while one is still loading must not let the slower,
+  // older answer land on top of the newer one.
+  const loadToken = useRef(0);
   const load = useCallback(async () => {
     if (!catalog) return;
+    const token = ++loadToken.current;
     setLoading(true);
     setError("");
-    setExhausted(false);
-    setItems([]);
+    reset({ items: [], offset: 0, more: false });
     try {
       const first = await loadDiscoverCatalog(catalog, effectiveGenre);
-      setItems(first);
-      // A catalog whose manifest never advertises `skip` has exactly one page.
-      if (!catalog.supportsPagination || first.length === 0) setExhausted(true);
+      if (token !== loadToken.current) return;
+      reset({
+        items: first,
+        offset: first.length,
+        // A catalog whose manifest never advertises `skip` has exactly one page.
+        more: catalog.supportsPagination && first.length > 0,
+      });
     } catch (reason) {
+      if (token !== loadToken.current) return;
       setError(
         reason instanceof Error ? reason.message : "Could not load catalog",
       );
-      setExhausted(true);
     } finally {
-      setLoading(false);
+      if (token === loadToken.current) setLoading(false);
     }
-  }, [catalog, effectiveGenre]);
+  }, [catalog, effectiveGenre, reset]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const more = useCallback(async () => {
-    if (!catalog || loading || loadingMore || exhausted || items.length === 0)
-      return;
-    setLoadingMore(true);
-    try {
-      const next = await loadDiscoverCatalog(
-        catalog,
-        effectiveGenre,
-        items.length,
-      );
-      const known = new Set(items.map((item) => `${item.type}:${item.id}`));
-      const additions = next.filter(
-        (item) => !known.has(`${item.type}:${item.id}`),
-      );
-      // Addons that ignore `skip` repeat the first page forever, so a page
-      // that adds nothing new ends the run rather than looping.
-      if (additions.length === 0) setExhausted(true);
-      else setItems((current) => [...current, ...additions]);
-    } catch {
-      setExhausted(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [catalog, effectiveGenre, exhausted, items, loading, loadingMore]);
-
-  useEffect(() => {
-    const node = sentinel.current;
-    if (!node || exhausted || searchingRef.current) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) more();
-      },
-      { rootMargin: "600px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [more, exhausted]);
-
-  const searching = query.trim().length > 0;
-  // Read inside the observer effect, which must not re-subscribe per render.
-  const searchingRef = useRef(searching);
-  searchingRef.current = searching;
   const shown = searching ? results : items;
   const { visible } = useProgressiveList(shown, {
     resetKey: searching ? query : `${catalog?.key}:${effectiveGenre ?? ""}`,
@@ -350,14 +323,15 @@ export function Discover({
           ))}
         </div>
       )}
-      {!exhausted && !searching && (
-        <div ref={sentinel} className="grid-sentinel" />
+      {!paging.exhausted && !searching && !loading && (
+        <div ref={paging.sentinel} className="grid-sentinel" />
       )}
-      {loadingMore && (
-        <div className="grid-more" role="status">
-          <i className="mini-spinner" />
-          Loading more…
-        </div>
+      {!searching && (
+        <PagingStatus
+          loading={paging.loadingMore}
+          failure={paging.failure}
+          onRetry={paging.retry}
+        />
       )}
     </section>
   );

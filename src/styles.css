@@ -387,6 +387,16 @@ a {
 .media-section {
   margin: 24px 0 38px;
 }
+.home-shelf {
+  display: flow-root;
+  margin: 24px 0 38px;
+}
+.home-shelf > .media-section {
+  margin: 0;
+}
+.home-shelf-placeholder {
+  height: calc(var(--poster-height, 210px) + 110px);
+}
 .media-section header {
   display: flex;
   align-items: end;
@@ -1892,6 +1902,87 @@ a {
   justify-content: center;
   gap: 10px;
 }
+/* Autoplay is a full-screen artwork wait; manual selection retains the sheet. */
+.source-sheet.is-autoplay {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: var(--app-bg, #080a0d);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.autoplay-progress {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(76px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom));
+  isolation: isolate;
+}
+.autoplay-backdrop,
+.autoplay-progress::after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.autoplay-backdrop {
+  z-index: -2;
+  object-fit: cover;
+  object-position: center 25%;
+}
+.autoplay-progress::after {
+  content: "";
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(0 0 0 / 30%), rgb(0 0 0 / 55%) 50%, rgb(0 0 0 / 78%));
+  pointer-events: none;
+}
+.autoplay-content {
+  display: grid;
+  justify-items: center;
+  gap: 24px;
+  width: min(100%, 440px);
+  text-align: center;
+}
+.autoplay-content > p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 650;
+  text-shadow: 0 2px 14px rgb(0 0 0 / 65%);
+}
+.autoplay-content .mini-spinner {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+.autoplay-manual {
+  max-width: 100%;
+  min-height: 48px;
+  padding: 12px 24px;
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 14px;
+  color: #f5f7fa;
+  background: rgb(0 0 0 / 25%);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.autoplay-manual:hover,
+.autoplay-manual:focus-visible {
+  border-color: var(--accent);
+  background: rgb(0 0 0 / 45%);
+}
+.autoplay-close {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+}
 .source-list {
   display: grid;
   gap: 12px;
@@ -3217,6 +3308,18 @@ html.native-player-active.native-player-covered .player-view.native-player {
 .player-center-busy svg {
   width: 52px;
   height: 52px;
+}
+/* The last step of autoplay's sequence, under the spinner. */
+.player-starting {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: #e8ebef;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 0 1px 8px #000c;
 }
 .player-center svg {
   width: 64px;
@@ -5107,6 +5210,44 @@ body.is-locked {
   font-style: normal;
   font-variant-numeric: tabular-nums;
 }
+/* How much of the library is watched, for the tab in view: a slim bar in
+   the accent and the count beside it. */
+.library-watched {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 0 4px;
+}
+.library-watched-bar {
+  flex: 0 1 280px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.library-watched-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #ef3d50);
+  transition: width 0.4s ease;
+}
+.library-watched-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  color: #8d97a2;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.library-watched-text strong {
+  color: #e8ebef;
+  font-weight: 700;
+}
+.library-watched-text em {
+  font-style: normal;
+}
 .library-random-button {
   display: inline-flex;
   align-items: center;
@@ -5695,6 +5836,45 @@ body.is-locked {
   padding: 26px 0 8px;
   color: #8d97a2;
   font-size: 13px;
+}
+/* The next page could not be loaded: what happened, and a way to try again,
+   where the scroll stopped. */
+.grid-more-failed {
+  gap: 16px;
+  text-align: left;
+}
+.grid-more-failed span {
+  display: grid;
+  gap: 2px;
+}
+.grid-more-failed strong {
+  color: #e8ebef;
+  font-weight: 650;
+}
+.grid-more-failed small {
+  color: #8d97a2;
+  font-size: 12px;
+}
+.grid-more-failed button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--panel-border, #232930);
+  border-radius: 12px;
+  color: #f7f8fa;
+  background: var(--panel-soft, #12161b);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.grid-more-failed button:hover {
+  border-color: var(--accent, #ef3d50);
+}
+.grid-more-failed button svg {
+  width: 16px;
+  height: 16px;
 }
 .mini-spinner {
   width: 17px;

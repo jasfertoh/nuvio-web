@@ -101,8 +101,8 @@ type ExternalPlayerDefinition = {
   label: string | Partial<Record<PlayerPlatform, string>>;
   platforms: Record<ExternalPlayerSurface, readonly PlayerPlatform[]>;
   /**
-   * Whether the player tells us what happened when it is done. Only Outplayer
-   * does; everything else is a one-way trip and has to be asked afterwards.
+   * Whether the player tells us what happened when it is done. Outplayer and
+   * Lenna do; everything else is a one-way trip and has to be asked afterwards.
    */
   reportsBack?: boolean;
 };
@@ -165,6 +165,13 @@ const externalPlayerDefinitions: readonly ExternalPlayerDefinition[] = [
     // scheme.
     mode: "outplayer",
     label: "Outplayer",
+    platforms: { settings: ["apple-mobile"], player: ["apple-mobile"] },
+    reportsBack: true,
+  },
+  {
+    // iOS and iPadOS only, like Outplayer.
+    mode: "lenna",
+    label: "Lenna",
     platforms: { settings: ["apple-mobile"], player: ["apple-mobile"] },
     reportsBack: true,
   },
@@ -357,6 +364,30 @@ export function outplayerPlaybackUrl(
   return `outplayer://x-callback-url/play?${query.toString()}`;
 }
 
+/**
+ * Lenna's x-callback-url form.
+ *
+ * `position` starts it where you left off. Lenna opens x-success when the
+ * video is closed, appending `position` and `duration` in seconds, and
+ * x-error when it could not play. Both mean "stopped" here: closing early and
+ * playing to the end are told apart by the position, as with Outplayer's
+ * x-cancel, since Lenna reports no finish of its own.
+ */
+export function lennaPlaybackUrl(
+  url: string,
+  options: ExternalPlayerLaunchOptions = {},
+) {
+  const query = new URLSearchParams({ url });
+  if (options.subtitleUrl) query.set("sub", options.subtitleUrl);
+  query.set("position", String(Math.max(0, Math.floor(options.positionSeconds ?? 0))));
+  if (options.returnUrlFor) {
+    const stopped = options.returnUrlFor("?nuvio-external=stopped");
+    query.set("x-success", stopped);
+    query.set("x-error", stopped);
+  }
+  return `lenna://x-callback-url/play?${query.toString()}`;
+}
+
 /** Hands a stream to a registered player outside the browser. */
 export function launchExternalPlayer(
   mode: ExternalPlayerMode,
@@ -413,6 +444,10 @@ export function launchExternalPlayer(
   }
   if (mode === "outplayer") {
     window.location.href = outplayerPlaybackUrl(safeUrl, options);
+    return;
+  }
+  if (mode === "lenna") {
+    window.location.href = lennaPlaybackUrl(safeUrl, options);
     return;
   }
   if (mode === "infuse") {

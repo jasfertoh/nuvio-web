@@ -1,6 +1,6 @@
 /** Bridges service-worker updates to Settings and safe application reloads. */
 let registration: ServiceWorkerRegistration | null = null;
-let reloadObserver: MutationObserver | null = null;
+let waitingToReload = false;
 
 export function setRegistration(value: ServiceWorkerRegistration | null): void {
   registration = value;
@@ -50,26 +50,32 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
 
 /**
  * The auto-update worker already owns the newest cache when this is called.
- * Reload immediately during ordinary browsing, but leave a playing video
- * alone and reload as soon as its player view is actually removed.
+ *
+ * Reloads only while the app is out of sight, and never over a player. It
+ * used to reload straight away during ordinary browsing, and browsers check
+ * for a new worker during ordinary activity — scrolling a catalog fetches
+ * poster after poster — so a deploy landed as the page vanishing mid-scroll
+ * and reopening at the profile picker. Now the new version is picked up the
+ * next time the app is switched away from, or opened.
+ *
+ * Until then the old build keeps running. A chunk it no longer finds on the
+ * server is caught by the `vite:preloadError` handler in main.tsx, which
+ * reloads at that point instead.
  */
 export function reloadForUpdateWhenSafe(): void {
   const playerOpen = () => document.querySelector(".player-view") !== null;
-  if (!playerOpen()) {
+  const reloadIfUnseen = () => {
+    if (document.visibilityState !== "hidden" || playerOpen()) return;
+    document.removeEventListener("visibilitychange", reloadIfUnseen);
+    window.location.reload();
+  };
+  if (document.visibilityState === "hidden" && !playerOpen()) {
     window.location.reload();
     return;
   }
-  if (reloadObserver) return;
-  reloadObserver = new MutationObserver(() => {
-    if (playerOpen()) return;
-    reloadObserver?.disconnect();
-    reloadObserver = null;
-    window.location.reload();
-  });
-  reloadObserver.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  if (waitingToReload) return;
+  waitingToReload = true;
+  document.addEventListener("visibilitychange", reloadIfUnseen);
 }
 
 /**

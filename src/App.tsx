@@ -1,4 +1,6 @@
 import { ProfileGate } from "./components/ProfileGate";
+import { HomeShelf } from "./components/HomeShelf";
+import { profileForReload, profileSessionMarker, SESSION_PROFILE_KEY } from "./lib/profileSession";
 import { effectiveAddonProfileIndex } from "./lib/account";
 import { PinPrompt } from "./components/PinPrompt";
 import {
@@ -45,6 +47,7 @@ import { Discover } from "./components/Discover";
 import { Downloads } from "./components/Downloads";
 import { DownloadSettings } from "./components/DownloadSettings";
 import { ExternalWatchPrompt } from "./components/ExternalWatchPrompt";
+import { createReturnReportCheck } from "./lib/externalReturn";
 import {
   CollectionFolderView,
   CollectionRow,
@@ -168,6 +171,9 @@ import {
   type WatchIndex,
   type ContinueCard,
 } from "./lib/progress";
+import { tallyWatched } from "./lib/libraryStats";
+import { useCatalogPaging } from "./lib/useCatalogPaging";
+import { PagingStatus } from "./components/PagingStatus";
 import { useProgressiveList } from "./lib/useProgressiveList";
 import { useScrollLock } from "./lib/useScrollLock";
 import { ContinueLoadingOverlay } from "./components/ContinueLoadingOverlay";
@@ -396,6 +402,17 @@ const DETAIL_SECTION_LABELS: Record<
   DETAILS: "Details",
 };
 
+
+const checkRelayForReturn = createReturnReportCheck(collectRelayReport);
+
+function sessionProfile(profiles: Profile[]): Profile | undefined {
+  try {
+    return profileForReload(profiles, sessionStorage.getItem(SESSION_PROFILE_KEY));
+  } catch {
+    return undefined;
+  }
+}
+
 export function App() {
   const [booting, setBooting] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
@@ -492,11 +509,15 @@ export function App() {
   const homeLayoutWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const homeLayoutRevision = useRef(0);
   const [folder, setFolder] = useState<CollectionFolder | null>(null);
-  // Raised after a hand-off to another player, which reports nothing back.
+  // Manual fallback for a hand-off, shown only after its return check settles.
   const [externalWatch, setExternalWatch] = useState<{
     meta: Meta;
     video?: Video;
   } | null>(null);
+  const [externalReturnPending, setExternalReturnPending] = useState(
+    () => Boolean(pendingRelayToken()),
+  );
+  const externalReturnGeneration = useRef(0);
   /**
    * Whether Home opens with the featured carousel.
    *
@@ -721,6 +742,18 @@ export function App() {
   const [recentSearches, setRecentSearches] = useState<string[]>(readRecentSearches);
   const [searchFocused, setSearchFocused] = useState(false);
   const activateProfile = useCallback((next: Profile | null) => {
+    // A late return from another profile must not write into the new one.
+    if (handedOff.current) clearExternalReturn();
+    // Kept for this tab's session, so a reload — an update applying, or iOS
+    // reloading a page that ran low on memory — comes back to the profile
+    // that was open rather than to the picker. Not "remember profile": that
+    // is about opening the app, and a reload is not an app open.
+    try {
+      if (next) sessionStorage.setItem(SESSION_PROFILE_KEY, profileSessionMarker(next));
+      else sessionStorage.removeItem(SESSION_PROFILE_KEY);
+    } catch {
+      // Private browsing can refuse storage; the picker is the fallback.
+    }
     episodeSwitch.current += 1;
     setResolvingContinue(null);
     setProfileStarting(next !== null);
@@ -829,25 +862,37 @@ export function App() {
   useEffect(() => {
     /**
      * Nothing in the address is the normal case on an installed iOS web app,
-     * so the relay is asked separately rather than as a fallback nobody
-     * reaches. Both answers are logged: "had nothing" is as much of a result
-     * as an answer, and distinguishes a relay that was never asked from one
-     * that was asked and was empty.
+     * so the relay is asked separately. Keep manual entry out of sight until
+     * this check settles, including the brief callback delay after waking.
      */
+    let live = true;
     const pollRelay = () => {
       const token = pendingRelayToken();
-      if (!token) return;
-      void collectRelayReport(token).then((relayed) => {
-        if (!relayed) return;
-        clearRelayToken();
-        setPendingReport(relayed);
+      if (!token) {
+        setExternalReturnPending(false);
+        return;
+      }
+      const generation = externalReturnGeneration.current;
+      setExternalReturnPending(true);
+      void checkRelayForReturn(token).then((relayed) => {
+        if (!live || generation !== externalReturnGeneration.current || pendingRelayToken() !== token) return;
+        // Queue the report before revealing any fallback. The render guard
+        // also covers the commit before the saving effect consumes it.
+        if (relayed) {
+          clearRelayToken();
+          setPendingReport(relayed);
+        }
+        setExternalReturnPending(false);
       });
     };
     const check = () => {
       if (document.visibilityState !== "visible") return;
       const report = takeExternalReport();
       if (report) {
+        externalReturnGeneration.current += 1;
+        clearRelayToken();
         setPendingReport(report);
+        setExternalReturnPending(false);
         return;
       }
       pollRelay();
@@ -855,12 +900,13 @@ export function App() {
     // A cold start is a return too, and the quietest kind: nothing becomes
     // visible because it was never hidden, so no event fires and the relay
     // would go unasked.
-    pollRelay();
+    if (!bootReport) pollRelay();
     const onVisible = () => check();
     const onShow = () => check();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("pageshow", onShow);
     return () => {
+      live = false;
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", onShow);
     };
@@ -924,7 +970,10 @@ export function App() {
             (item) => item.profileIndex === bootHandoff.profileIndex,
           )
         : undefined;
-      const target = resumeProfile ?? (rememberProfileRef.current ? last : undefined);
+      const target =
+        resumeProfile ??
+        sessionProfile(nextProfiles) ??
+        (rememberProfileRef.current ? last : undefined);
       if (!autoOpenAttempted.current && target) {
         autoOpenAttempted.current = true;
         if (target.pinEnabled) setPinTarget(target);
@@ -1766,20 +1815,23 @@ export function App() {
     ]);
   }
 
-  /**
-   * Records what a player said about the title it was handed.
-   *
-   * Called whenever a report turns up — at boot when the return was a fresh
-   * load, and on being brought to the front when it was not.
-   */
+  /** Also invalidates callbacks after manual entry, dismissal or a profile change. */
+  function clearExternalReturn() {
+    externalReturnGeneration.current += 1;
+    handedOff.current = null;
+    clearExternalHandoff();
+    clearRelayToken();
+    setPendingReport(null);
+    setExternalReturnPending(false);
+    setExternalWatch(null);
+  }
+
+  /** Records a player's return report at boot or when the app wakes again. */
   function applyExternalReport(report: ExternalPlayerReport) {
     const watched = handedOff.current;
     if (!watched) return;
-    clearExternalHandoff();
-    clearRelayToken();
     if (report.outcome === "finished") {
-      handedOff.current = null;
-      setExternalWatch(null);
+      clearExternalReturn();
       void toggleWatched(watched.meta, watched.video, true);
       setMessage("Marked as watched.");
       return;
@@ -1791,11 +1843,11 @@ export function App() {
     // it still has to be asked — silently saving nothing is the one outcome
     // this must never produce.
     if (report.positionMs <= 0) {
+      setExternalReturnPending(false);
       setExternalWatch(watched);
       return;
     }
-    handedOff.current = null;
-    setExternalWatch(null);
+    clearExternalReturn();
     savePlaybackProgress(watched, report.positionMs, report.durationMs, false);
     setMessage("Saved your position.");
   }
@@ -1828,6 +1880,8 @@ export function App() {
   ) {
     // Written before the launch, not after: handing off navigates away, and on
     // Android the process may not survive to run another line.
+    externalReturnGeneration.current += 1;
+    setPendingReport(null);
     if (profile && mode !== "copy" && mode !== "m3u") {
       rememberExternalHandoff(profile.profileIndex, meta, video);
       // Also held in memory, for the return that finds the app still running.
@@ -1836,7 +1890,9 @@ export function App() {
     const resumeMs = positionMs ?? resumePositionMs(meta, video);
     // The relay is the only route that carries a position into an installed
     // iOS web app. Anywhere else the app's own address already reaches it.
-    const relay = canReturnToApp() ? "" : newRelayToken();
+    clearRelayToken();
+    const relay = mode === "copy" || mode === "m3u" || canReturnToApp() ? "" : newRelayToken();
+    setExternalReturnPending(Boolean(relay) && mode !== "copy" && mode !== "m3u");
     platform.externalPlayer.launch(mode, url, video?.title || meta.name, {
       positionSeconds: resumeMs / 1000,
       returnUrlFor: relay
@@ -2600,25 +2656,22 @@ export function App() {
           </button>
         ))}
       </nav>
-      {externalWatch && (
+      {externalWatch && !externalReturnPending && !pendingReport && (
         <ExternalWatchPrompt
           meta={externalWatch.meta}
           video={externalWatch.video}
           /* Answered here, so there is nothing left to resume on a later open. */
           onDismiss={() => {
-            clearExternalHandoff();
-            setExternalWatch(null);
+            clearExternalReturn();
           }}
           onFinished={() => {
             const current = externalWatch;
-            clearExternalHandoff();
-            setExternalWatch(null);
+            clearExternalReturn();
             void toggleWatched(current.meta, current.video, true);
           }}
           onStopped={(positionMs, durationMs) => {
             const current = externalWatch;
-            clearExternalHandoff();
-            setExternalWatch(null);
+            clearExternalReturn();
             savePlaybackProgress(current, positionMs, durationMs, false);
             setMessage("Saved your position.");
           }}
@@ -2924,7 +2977,9 @@ function HomeView({
   onMenu(item: Meta, x: number, y: number): void;
   onContinueMenu(card: ContinueCard, x: number, y: number): void;
 }) {
-  const { visible } = useProgressiveList(rows, {
+  // The native shell retains its progressive rows and controller focus model.
+  // Browser rows instead remain as placeholders until near the viewport.
+  const { visible } = useProgressiveList(platform.player ? rows : [], {
     resetKey: "home",
     first: 3,
     chunk: 2,
@@ -2940,24 +2995,28 @@ function HomeView({
           onMenu={onContinueMenu}
         />
       )}
-      {visible.map((row) =>
-        row.kind === "collection" ? (
-          <CollectionRow
-            key={row.key}
-            collection={row.collection}
-            onOpenFolder={onOpenFolder}
-          />
-        ) : (
-          <MediaRow
-            key={row.key}
-            section={row.section}
-            index={index}
-            onOpen={onOpen}
-            onMenu={onMenu}
-            onSeeAll={() => onSeeAll(row.section)}
-          />
-        ),
-      )}
+      {(platform.player ? visible : rows).map((row) => (
+        <HomeShelf
+          key={row.key}
+          label={row.kind === "collection" ? row.collection.title : row.section.name}
+          enabled={!platform.player}
+        >
+          {row.kind === "collection" ? (
+            <CollectionRow
+              collection={row.collection}
+              onOpenFolder={onOpenFolder}
+            />
+          ) : (
+            <MediaRow
+              section={row.section}
+              index={index}
+              onOpen={onOpen}
+              onMenu={onMenu}
+              onSeeAll={() => onSeeAll(row.section)}
+            />
+          )}
+        </HomeShelf>
+      ))}
     </>
   );
 }
@@ -2992,6 +3051,9 @@ function LibraryView({
     () => (tab === "all" ? items : items.filter((item) => item.type === tab)),
     [items, tab],
   );
+  const tally = useMemo(() => tallyWatched(items, index.watched), [items, index]);
+  const shown = tally[tab];
+  const watchedShare = shown.total ? shown.watched / shown.total : 0;
   const { visible } = useProgressiveList(filtered, { resetKey: tab });
   const tabs = [
     { key: "all", label: t("library.all"), count: counts.all },
@@ -3029,6 +3091,30 @@ function LibraryView({
           {t("library.randomPick")}
         </button>
       </div>
+      {shown.total > 0 && (
+        <div className="library-watched">
+          <div
+            className="library-watched-bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={shown.total}
+            aria-valuenow={shown.watched}
+            aria-label={t("library.watchedOf", shown)}
+          >
+            <i style={{ width: `${watchedShare * 100}%` }} />
+          </div>
+          <span className="library-watched-text">
+            <strong>{t("library.watchedOf", shown)}</strong>
+            {/* On All, the split by type, so one number does not hide the other. */}
+            {tab === "all" && tally.movie.total > 0 && tally.series.total > 0 && (
+              <>
+                <em>{t("library.movies")} {tally.movie.watched}/{tally.movie.total}</em>
+                <em>{t("library.series")} {tally.series.watched}/{tally.series.total}</em>
+              </>
+            )}
+          </span>
+        </div>
+      )}
       {filtered.length === 0 ? (
         <div className="empty-state">
           <strong>{t("library.empty.title")}</strong>
@@ -3677,55 +3763,22 @@ function CatalogView({
   onOpen(item: Meta): void;
   onMenu(item: Meta, x: number, y: number): void;
 }) {
-  const [items, setItems] = useState<Meta[]>(section.items);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [exhausted, setExhausted] = useState(false);
-  const [error, setError] = useState("");
-  const sentinel = useRef<HTMLDivElement | null>(null);
-
+  // Starts from the whole first page the home row was cut from, and asks for
+  // page two from where the addon's first page actually ended.
+  const start = (from: CatalogSection) => ({
+    items: from.page ?? from.items,
+    offset: from.fetched ?? from.items.length,
+    more: true,
+  });
+  const paging = useCatalogPaging({
+    loadPage: (offset) => loadCatalog(section, offset),
+    initial: start(section),
+  });
+  const { items, reset } = paging;
+  const firstSection = useRef(section);
   useEffect(() => {
-    setItems(section.items);
-    setExhausted(false);
-    setError("");
-  }, [section]);
-
-  const more = useCallback(async () => {
-    if (loadingMore || exhausted) return;
-    setLoadingMore(true);
-    try {
-      const next = await loadCatalog(section, items.length);
-      // Addons that ignore `skip` return the same page forever, so anything
-      // that adds no new ids ends the run rather than looping.
-      const known = new Set(items.map((item) => `${item.type}:${item.id}`));
-      const additions = next.filter(
-        (item) => !known.has(`${item.type}:${item.id}`),
-      );
-      if (additions.length === 0) setExhausted(true);
-      else setItems((current) => [...current, ...additions]);
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Could not load more",
-      );
-      setExhausted(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [exhausted, items, loadingMore, section]);
-
-  // Infinite scroll rather than a button: the sentinel sits below the grid and
-  // fetches the next page as it comes into view.
-  useEffect(() => {
-    const node = sentinel.current;
-    if (!node || exhausted) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) more();
-      },
-      { rootMargin: "600px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [more, exhausted]);
+    if (section !== firstSection.current) reset(start(section));
+  }, [section, reset]);
 
   const { visible } = useProgressiveList(items, { resetKey: section.key });
   return (
@@ -3748,7 +3801,6 @@ function CatalogView({
           </p>
         </div>
       </div>
-      {error && <div className="notice error">{error}</div>}
       <div className="poster-grid">
         {visible.map((item) => (
           <PosterCard
@@ -3760,13 +3812,12 @@ function CatalogView({
           />
         ))}
       </div>
-      {!exhausted && <div ref={sentinel} className="grid-sentinel" />}
-      {loadingMore && (
-        <div className="grid-more" role="status">
-          <i className="mini-spinner" />
-          {t("common.loadingMore")}
-        </div>
-      )}
+      {!paging.exhausted && <div ref={paging.sentinel} className="grid-sentinel" />}
+      <PagingStatus
+        loading={paging.loadingMore}
+        failure={paging.failure}
+        onRetry={paging.retry}
+      />
     </section>
   );
 }
