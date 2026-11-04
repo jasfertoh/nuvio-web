@@ -10233,3 +10233,17 @@ html.native-player-active .player-view.native-player.native-player-loading {
     display: grid;
   }
 }
+
+/* Audio and speed in the episodes drawer. */
+.player-drawer-list {
+  flex: 1;
+  overscroll-behavior: contain;
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+}
+.player-drawer-note {
+  display: block;
+  margin: 0 16px 12px;
+  color: #8d97a2;
+  font-size: 13px;
+  line-height: 1.4;
+}

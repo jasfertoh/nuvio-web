@@ -177,6 +177,40 @@ function runtimeHintSeconds(meta: Meta, video?: Video) {
  */
 const ASPECT_MODES: ResizeMode[] = ["Fit", "Fill", "Stretch"];
 
+/**
+ * The side drawer the player's panels share - episodes, audio, speed - so they
+ * open, look and close the same way: a scrim over the film that closes it on
+ * a click outside, and a panel against the right edge.
+ */
+function PlayerDrawer({
+  eyebrow,
+  title,
+  onClose,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  onClose(): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="player-episodes-scrim" onClick={onClose}>
+      <aside className="player-episodes" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="eyebrow">{eyebrow}</span>
+            <strong>{title}</strong>
+          </div>
+          <button className="circle-button" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </header>
+        {children}
+      </aside>
+    </div>
+  );
+}
+
 /** How long the controls and cursor stay up after the last movement while playing. */
 const CONTROLS_HIDE_MS = 2000;
 /** Subtitle size multiplier for this screen: 1 on a phone, up to 1.75 on a desktop or TV. */
@@ -802,8 +836,6 @@ export function Player({
       }, PAUSED_INFO_MS);
     if (running)
       hideTimer.current = window.setTimeout(() => {
-        setAudioOpen(false);
-        setSpeedOpen(false);
         setBrightnessOpen(false);
         setControlsVisible(false);
       }, CONTROLS_HIDE_MS);
@@ -2986,13 +3018,11 @@ export function Player({
           </div>
         </div>
       )}
-      {(subtitleOpen || audioOpen || speedOpen || sourcesOpen) && (
+      {(subtitleOpen || sourcesOpen) && (
         <div
           className="track-backdrop"
           onClick={() => {
             setSubtitleOpen(false);
-            setAudioOpen(false);
-            setSpeedOpen(false);
             setSourcesOpen(false);
           }}
         />
@@ -3126,10 +3156,9 @@ export function Player({
         </div>
       )}
       {audioOpen && (
-        <div className="track-dialog">
-          <div className="track-dialog-title">Audio</div>
+        <PlayerDrawer eyebrow="AUDIO" title="Language and track" onClose={() => setAudioOpen(false)}>
           {audioOptions.length ? (
-            <div className="track-rail">
+            <div className="track-rail player-drawer-list">
               {audioOptions.map((track) => (
                 <button
                   key={track.id}
@@ -3144,21 +3173,21 @@ export function Player({
               ))}
             </div>
           ) : (
-            <p>The browser reports only the default track.</p>
+            <p className="player-drawer-note">The browser reports only the default track.</p>
           )}
           {riskyAudio && (
-            <small>
+            <small className="player-drawer-note">
               This source advertises an audio/container format that
               browsers may not decode. Use an external player if it
               stays silent.
             </small>
           )}
           {!nativePlayer && navigableExternalUrl && (
-            <a href={navigableExternalUrl} target="_blank" rel="noopener noreferrer">
+            <a className="player-drawer-note" href={navigableExternalUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink /> Open externally
             </a>
           )}
-        </div>
+        </PlayerDrawer>
       )}
       {pausedInfo && (
         <div className="player-paused-info" aria-live="polite">
@@ -3178,9 +3207,8 @@ export function Player({
         </div>
       )}
       {speedOpen && (
-        <div className="track-dialog">
-          <div className="track-dialog-title">Speed</div>
-          <div className="track-rail">
+        <PlayerDrawer eyebrow="SPEED" title="Playback speed" onClose={() => setSpeedOpen(false)}>
+          <div className="track-rail player-drawer-list">
             {PLAYBACK_RATES.map((rate) => (
               <button
                 key={rate}
@@ -3194,7 +3222,7 @@ export function Player({
               </button>
             ))}
           </div>
-        </div>
+        </PlayerDrawer>
       )}
       <div className="player-controls">
         <div className="player-timeline">
@@ -3437,6 +3465,7 @@ export function Player({
             <div className="audio-picker">
               <button
                 className={audioOpen ? "active" : ""}
+                aria-label="Audio"
                 aria-expanded={audioOpen}
                 onClick={() => {
                   setSubtitleOpen(false);
@@ -3513,31 +3542,11 @@ export function Player({
         </div>
       )}
       {episodesOpen && !!episodes?.length && (
-        <div
-          className="player-episodes-scrim"
-          onClick={() => setEpisodesOpen(false)}
-        >
-          {/* The detail page's own list, not a second one built to look like
-              it: same rows, same watched eye, same resume bar, and the same
-              season picker rather than every season run together with the
-              specials among them. */}
-          <aside
-            className="player-episodes"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div>
-                <span className="eyebrow">EPISODES</span>
-                <strong>{meta.name}</strong>
-              </div>
-              <button
-                className="circle-button"
-                aria-label="Close"
-                onClick={() => setEpisodesOpen(false)}
-              >
-                <X />
-              </button>
-            </header>
+        /* The detail page's own list, not a second one built to look like
+           it: same rows, same watched eye, same resume bar, and the same
+           season picker rather than every season run together with the
+           specials among them. */
+        <PlayerDrawer eyebrow="EPISODES" title={meta.name} onClose={() => setEpisodesOpen(false)}>
             <label className="season-select-wrap">
               <span>SEASON</span>
               <Select
@@ -3581,8 +3590,7 @@ export function Player({
                 );
               })}
             </div>
-          </aside>
-        </div>
+        </PlayerDrawer>
       )}
       {error && (
         <div className="player-error">
