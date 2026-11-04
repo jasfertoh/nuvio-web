@@ -11,6 +11,7 @@ import { proxiedPlaybackUrl } from "../lib/mediaProxy";
 import { deviceSubtitleFontSize } from "../lib/deviceSubtitleSize.ts";
 import { ensureProxySignature } from "../lib/proxySignature";
 import {
+  fetchSubtitleOffset,
   proxyThumbnailUrl,
   audioDetail,
   fetchProxySubtitles,
@@ -476,6 +477,9 @@ export function Player({
    * carrying that correction into the next film would be wrong every time.
    */
   const [subtitleDelayMs, setSubtitleDelayMs] = useState(0);
+  // Measured against the audio for the subtitle on screen, on top of the
+  // viewer's own delay. Not saved to the title: the next file measures its own.
+  const [autoSyncMs, setAutoSyncMs] = useState(0);
   /**
    * A cue's own timings, before any delay. Shifting from the original each
    * time keeps the adjustment absolute rather than accumulating, so dialling
@@ -2039,7 +2043,9 @@ export function Player({
       {
         id: "delay",
         label: "Delay",
-        value: `${subtitleDelayMs >= 0 ? "+" : "−"}${Math.abs(subtitleDelayMs / 1000).toFixed(3)}s`,
+        value:
+          `${subtitleDelayMs >= 0 ? "+" : "−"}${Math.abs(subtitleDelayMs / 1000).toFixed(3)}s` +
+          (autoSyncMs ? ` · auto ${autoSyncMs > 0 ? "+" : "−"}${Math.abs(autoSyncMs / 1000).toFixed(2)}s` : ""),
         down: () => setSubtitleDelayMs((value) => value - 100),
         up: () => setSubtitleDelayMs((value) => value + 100),
       },
@@ -2117,7 +2123,7 @@ export function Player({
     // keep closing over the size from the render that built them, so every
     // press recomputes from the same stale base and the size moves once and
     // then sticks - and the number shown beside it never changes either.
-  }, [settings, subtitleDelayMs, onPlayerSetting, subtitleFontSizeSp]);
+  }, [settings, subtitleDelayMs, autoSyncMs, onPlayerSetting, subtitleFontSizeSp]);
 
 
   const subtitleStyleToggles = useMemo(
@@ -2139,7 +2145,7 @@ export function Player({
   const applySubtitleDelay = useCallback(() => {
     const element = videoRef.current;
     if (!element) return;
-    const shift = subtitleDelayMs / 1000;
+    const shift = (subtitleDelayMs + autoSyncMs) / 1000;
     const list = element.textTracks;
     for (let index = 0; index < list.length; index += 1) {
       const cues = list[index].cues;
@@ -2171,7 +2177,7 @@ export function Player({
         }
       }
     }
-  }, [subtitleDelayMs]);
+  }, [subtitleDelayMs, autoSyncMs]);
 
   const applyCuePlacement = useCallback(() => {
     const element = videoRef.current;
@@ -2235,6 +2241,26 @@ export function Player({
       window.clearInterval(timer);
     };
   }, [applySubtitleDelay, applyCuePlacement, selectedSubtitle, proxySubtitles, addonSubtitles]);
+
+  // Auto-sync: an addon subtitle is measured against the audio once chosen.
+  // Embedded ones come from the file itself and are already in sync.
+  useEffect(() => {
+    setAutoSyncMs(0);
+    if (!url || !proxiedPlayback || selectedSubtitle < 0) return;
+    const track = addonSubtitles[selectedSubtitle];
+    if (!track) return;
+    const abort = new AbortController();
+    // The track actually playing: a dub can be timed differently.
+    void fetchSubtitleOffset(url, track.url, Math.max(0, proxyAudioOrdinal ?? selectedAudio ?? 0), abort.signal)
+      .then((result) => {
+        if (!abort.signal.aborted && result?.applied && Math.abs(result.offsetMs) >= 100)
+          setAutoSyncMs(result.offsetMs);
+      })
+      .catch(() => {
+        // Unmeasured is just unshifted.
+      });
+    return () => abort.abort();
+  }, [url, proxiedPlayback, selectedSubtitle, addonSubtitles, proxyAudioOrdinal, selectedAudio]);
 
   /** So a source is only auto-subtitled once, and never over a real choice. */
   /**

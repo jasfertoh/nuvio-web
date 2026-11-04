@@ -49,6 +49,33 @@ function endpoint(path: string, sourceUrl: string, extra = ""): string {
   );
 }
 
+/**
+ * How far an addon subtitle is out against this file's own audio, measured by
+ * the proxy from three short stretches of it. `applied` is the proxy's verdict:
+ * the match beat shuffled copies of the subtitle and is worth correcting.
+ */
+export async function fetchSubtitleOffset(
+  sourceUrl: string,
+  subtitleUrl: string,
+  audioOrdinal: number,
+  signal?: AbortSignal,
+): Promise<{ offsetMs: number; applied: boolean } | null> {
+  await ensureProxySignature(sourceUrl);
+  const target = endpoint(
+    "subtitle-offset",
+    sourceUrl,
+    `&sub=${encodeURIComponent(subtitleUrl)}&audio=${Math.max(0, audioOrdinal)}`,
+  );
+  if (!target) return null;
+  const response = await fetch(target, { signal });
+  if (!response.ok) return null;
+  const data = (await response.json().catch(() => null)) as
+    | { offsetMs?: number; applied?: boolean }
+    | null;
+  if (!data || !Number.isFinite(data.offsetMs)) return null;
+  return { offsetMs: Number(data.offsetMs), applied: data.applied === true };
+}
+
 /** The proxy's thumbnails come in 10-second steps; asking within one reuses it. */
 export const THUMBNAIL_STEP_SECONDS = 10;
 
