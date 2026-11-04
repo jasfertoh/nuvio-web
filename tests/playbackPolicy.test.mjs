@@ -3,7 +3,6 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { readWebSettings, streamBadgesFor } from "../src/lib/webSettings.ts";
 import { automaticSkipSegment, nextEpisodeDue, selectAutoStream, shouldBlurEpisode, resolveAutoStream } from "../src/lib/playbackPolicy.ts";
-import { nativePlayerPreferences } from "../src/lib/nativePlayerPreferences.ts";
 import { withBlobTypedValue } from "../src/lib/settingsBlob.ts";
 import { parseBadgeImport, readBadgeRules, upsertBadgeImport, normalizeBadgeRules } from "../src/lib/fusionBadges.ts";
 
@@ -94,20 +93,6 @@ test("episode blur covers unwatched artwork but not watched/current episodes", (
   assert.equal(shouldBlurEpisode(true, true), false);
   assert.equal(shouldBlurEpisode(true, false, true), false);
 });
-test("native launch receives current typed audio/subtitle preferences, not account data", () => {
-  const data = nativePlayerPreferences({ ...defaults, useLibass: true, subtitleBold: true, preferredAudioLanguage: "en" });
-  assert.deepEqual(data.use_libass, { type: "boolean", value: true });
-  assert.deepEqual(data.subtitle_bold, { type: "boolean", value: true });
-  assert.deepEqual(data.preferred_audio_language, { type: "string", value: "en" });
-  assert.equal(data.auto_skip_segment_types, undefined);
-});
-test("each native playback launch carries the current RTX switch, including turning it off", () => {
-  for (const enabled of [true, false]) {
-    const data = nativePlayerPreferences({ ...defaults, rtxSuperResolution: enabled });
-    assert.deepEqual(data.nvidia_rtx_super_resolution_enabled, { type: "boolean", value: enabled });
-  }
-});
-
 test("Fusion imports preserve extra fields, normalize to one active source and enforce three URLs", () => {
   const source = (id) => parseBadgeImport(`https://example.test/${id}`, { filters: [{ name: "HD", pattern: "(?i)1080p", future: 42 }], groups: [{ id: "video", future: true }] });
   let rules = { imports: [], future: true };

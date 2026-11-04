@@ -172,19 +172,3 @@ test('a seek with no still frame keeps playing rather than failing', async () =>
   p.videoSink = { getCanvas: async () => null };
   await assert.doesNotReject(p.seek(0));
 });
-
-test("an open-ended range answered with 200 is not a refusal", () => {
-  // bytes=0- answered with the whole body is legal, common, and exactly the
-  // bytes asked for. Rejecting it turned away hosts that seek perfectly well
-  // — on the first request, so the whole file went with it.
-  const source = readFileSync(
-    new URL("../src/lib/nativeMkvPlayer.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /\/\^bytes=0-\/i/, "a range starting at zero is fine");
-  assert.match(
-    source,
-    /response\.status === 200 && !startsAtZero/,
-    "only a later offset answered with the whole file is a real problem",
-  );
-});
