@@ -15,12 +15,17 @@ export function nextEpisodeDue(position: number, duration: number, settings: Web
 }
 
 /** Source scope and selection mirror StreamAutoPlaySelector; never silently broaden an empty scope. */
-export function selectAutoStream(streams: readonly Stream[], settings: WebPlayerSettings, installedAddons: readonly string[], bingeGroup?: string, nextEpisode = false): Stream | null {
+/**
+ * `playable` says what counts as startable. By default that is a url; a client
+ * that resolves torrents through debrid passes its own, or a torrent-only
+ * addon setup never auto-plays at all.
+ */
+export function selectAutoStream(streams: readonly Stream[], settings: WebPlayerSettings, installedAddons: readonly string[], bingeGroup?: string, nextEpisode = false, playable: (stream: Stream) => boolean = (stream) => Boolean(stream.url || stream.externalUrl)): Stream | null {
   const manualNext = nextEpisode && settings.autoPlayMode === "MANUAL" && (settings.autoPlayNextEpisode || settings.preferBingeGroup);
   const groupOnly = manualNext && (!settings.autoPlayNextEpisode || !settings.autoPlayNextEpisodeFallback) && settings.preferBingeGroup;
   const mode = manualNext ? "FIRST_STREAM" : settings.autoPlayMode;
   const candidates = streams.filter((stream) => {
-    if (!stream.url && !stream.externalUrl) return false;
+    if (!playable(stream)) return false;
     if (manualNext) return true;
     const addon = installedAddons.includes(stream.addonName);
     if (settings.autoPlaySource === "INSTALLED_ADDONS_ONLY" && !addon) return false;

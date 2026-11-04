@@ -95,6 +95,7 @@ import {
   type WatchIndex,
 } from "../lib/progress";
 import { EpisodeRow } from "./Details";
+import { subtitleMatchesVideo } from "../lib/subtitleMatch";
 import { nextEpisodeDue, shouldBlurEpisode } from "../lib/playbackPolicy";
 import { Select } from "./Select";
 import {
@@ -433,7 +434,6 @@ export function Player({
    * back to zero restores exactly what the file said.
    */
   const cueOriginals = useRef(new WeakMap<TextTrackCue, { start: number; end: number }>());
-  const [externalPlayerOpen, setExternalPlayerOpen] = useState(false);
   const [episodesOpen, setEpisodesOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   /** Other sources for what is playing, fetched when the list is opened. */
@@ -780,7 +780,6 @@ export function Player({
       hideTimer.current = window.setTimeout(() => {
         setAudioOpen(false);
         setSpeedOpen(false);
-        setExternalPlayerOpen(false);
         setBrightnessOpen(false);
         setControlsVisible(false);
       }, CONTROLS_HIDE_MS);
@@ -1740,7 +1739,11 @@ export function Player({
     })
       .then((found) => {
         if (abort.signal.aborted) return;
-        setAddonSubtitles(found);
+        // Strict: only subtitles shown to be timed to this release. Nothing
+        // qualifying leaves the list empty, which is what starts extraction of
+        // the file's own subtitles below.
+        const videoName = stream.behaviorHints?.filename || streamReleaseName(stream) || undefined;
+        setAddonSubtitles(found.filter((track) => subtitleMatchesVideo(track, videoName)));
       })
       .catch(() => {
         // No addon subtitles is an ordinary outcome, not a failure.
@@ -2276,7 +2279,6 @@ export function Player({
           subtitleOpen ||
           audioOpen ||
           speedOpen ||
-          externalPlayerOpen ||
           sourcesOpen ||
           brightnessOpen
         ) {
@@ -2284,13 +2286,12 @@ export function Player({
           setSubtitleOpen(false);
           setAudioOpen(false);
           setSpeedOpen(false);
-          setExternalPlayerOpen(false);
           setSourcesOpen(false);
           setBrightnessOpen(false);
         }
         return;
       }
-      if (subtitleOpen || audioOpen || speedOpen || externalPlayerOpen || sourcesOpen) return;
+      if (subtitleOpen || audioOpen || speedOpen || sourcesOpen) return;
       const modified = event.ctrlKey || event.metaKey || event.altKey;
       if (modified && event.key.toLowerCase() !== "f") return;
       if (event.key === " " || event.key.toLowerCase() === "k") {
@@ -2327,7 +2328,6 @@ export function Player({
     subtitleOpen,
     audioOpen,
     speedOpen,
-    externalPlayerOpen,
     sourcesOpen,
   ]);
 
@@ -2432,7 +2432,6 @@ export function Player({
   };
   const openExternalPlayer = (mode: ExternalPlayerMode) => {
     if (!externalUrl) return;
-    setExternalPlayerOpen(false);
     // Paused first: the handoff unmounts this player, and a video element torn
     // down mid-play can leave the remuxer fetching for a moment after.
     const element = videoRef.current;
@@ -2605,7 +2604,6 @@ export function Player({
   const openSources = useCallback(() => {
     setAudioOpen(false);
     setSubtitleOpen(false);
-    setExternalPlayerOpen(false);
     setSourcesOpen((open) => !open);
     if (sourceList.length || sourcesLoading || !addons.length) return;
     setSourcesLoading(true);
@@ -2743,7 +2741,6 @@ export function Player({
     speedOpen ||
     sourcesOpen ||
     episodesOpen ||
-    externalPlayerOpen ||
     brightnessOpen;
   // How far ahead of the playhead the element already holds, for the bar.
   const bufferedTo = (() => {
@@ -3367,7 +3364,6 @@ export function Player({
                   aria-expanded={subtitleOpen}
                   onClick={() => {
                     setAudioOpen(false);
-                    setExternalPlayerOpen(false);
                     // Asking for subtitles is what starts the extraction pass.
                     setSubtitlesRequested(true);
                     setSubtitleOpen((value) => !value);
@@ -3395,7 +3391,6 @@ export function Player({
                 aria-expanded={audioOpen}
                 onClick={() => {
                   setSubtitleOpen(false);
-                  setExternalPlayerOpen(false);
                   setSpeedOpen(false);
                   setAudioOpen((value) => !value);
                 }}
@@ -3410,41 +3405,12 @@ export function Player({
                 aria-expanded={speedOpen}
                 onClick={() => {
                   setSubtitleOpen(false);
-                  setExternalPlayerOpen(false);
                   setAudioOpen(false);
                   setSpeedOpen((value) => !value);
                 }}
               >
                 <CircleGauge />
               </button>
-            )}
-            {!nativePlayer && externalUrl && !!platform.externalPlayer.options("player").length && (
-              <div className="external-player-picker">
-                <button
-                  className={externalPlayerOpen ? "active" : ""}
-                  aria-label="Open in external player"
-                  aria-expanded={externalPlayerOpen}
-                  onClick={() => {
-                    setAudioOpen(false);
-                    setExternalPlayerOpen((value) => !value);
-                  }}
-                >
-                  <ExternalLink />
-                </button>
-                {externalPlayerOpen && (
-                  <div className="external-player-menu">
-                    <strong>Open with</strong>
-                    {platform.externalPlayer.options("player").map((option) => (
-                      <button
-                        key={option.mode}
-                        onClick={() => openExternalPlayer(option.mode)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             )}
             {!!episodes?.length && onPlayEpisode && (
               <button
@@ -3453,7 +3419,6 @@ export function Player({
                 aria-expanded={episodesOpen}
                 onClick={() => {
                   setAudioOpen(false);
-                  setExternalPlayerOpen(false);
                   setEpisodesOpen((value) => !value);
                 }}
               >

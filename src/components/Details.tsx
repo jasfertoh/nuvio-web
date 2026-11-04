@@ -1,9 +1,14 @@
 import {
   DebridResolveError,
   canResolveDebrid,
+  checkDebridCached,
+  consumePrepareBudget,
   needsDebridResolve,
   resolveDebridStream,
 } from "../lib/debridResolve";
+
+/** Each is a Torbox round trip whether or not it is played, so only a few. */
+const PREPARE_LINK_COUNT = 3;
 import type { ProviderCredentialRow } from "../lib/providerCredentials";
 import { selectAutoStream } from "../lib/playbackPolicy";
 import { Select } from "./Select";
@@ -1047,6 +1052,50 @@ export function Details({
   const canResolve = (stream: Stream) =>
     needsDebridResolve(stream) && canResolveDebrid(providerCredentials);
 
+  /**
+   * Resolve the top few cached torrents in the background, as the fork did.
+   *
+   * Resolving on click costs a Torbox round trip before anything happens.
+   * Doing it while the list is read means the click lands on the proxy's
+   * resolve cache and playback starts at once. Only torrents Torbox already
+   * holds are asked about - resolving an uncached one adds it to the account -
+   * one at a time, and under the session-wide budget. Failures are silent: the
+   * click resolves again and reports properly.
+   */
+  const preparedHashes = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sourceOpen || !canResolveDebrid(providerCredentials)) return;
+    const candidates = visibleStreams
+      .filter(needsDebridResolve)
+      .filter((item) => !preparedHashes.current.has(String(item.infoHash || "").toLowerCase()))
+      .slice(0, PREPARE_LINK_COUNT);
+    if (!candidates.length) return;
+    let cancelled = false;
+    void (async () => {
+      const cached = await checkDebridCached(candidates, providerCredentials).catch(() => ({}) as Record<string, boolean>);
+      for (const target of candidates) {
+        const hash = String(target.infoHash || "").toLowerCase();
+        if (cancelled || !cached[hash]) continue;
+        if (!consumePrepareBudget()) return;
+        preparedHashes.current.add(hash);
+        try {
+          await resolveDebridStream(target, providerCredentials, {
+            season: sourceVideo?.season,
+            episode: sourceVideo?.episode,
+          });
+        } catch {
+          // Not cached after all, or refused. The click reports it.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the top of the list rather than every batch, so a slow addon
+    // arriving does not restart the work for sources already in hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceOpen, visibleStreams.slice(0, PREPARE_LINK_COUNT).map((item) => item.infoHash).join(), providerCredentials, sourceVideo?.id]);
+
   async function playSource(stream: Stream, video?: Video, player?: ExternalPlayerMode) {
     if (!canResolve(stream)) {
       playFresh(stream, video, player);
@@ -1126,8 +1175,16 @@ export function Details({
       latestAutoStreams = available;
       if (forceManual || autoManual.current || autoSelected || controller.signal.aborted || request !== sourceRequest.current || (!complete && !autoWaitExpired)) return;
       setAutoStage("choosing");
-      const choice = selectAutoStream(available, playerSettings,
-        addons.map((addon) => addon.manifest?.name || addon.name || ""), bingeGroupFor(meta.id));
+      // Torrents count when Torbox can resolve them (playSource does), and 4K
+      // never autoplays in the browser, as the list does not offer it there.
+      const choice = selectAutoStream(
+        platform.debrid ? available : available.filter(offeredInBrowser),
+        playerSettings,
+        addons.map((addon) => addon.manifest?.name || addon.name || ""),
+        bingeGroupFor(meta.id),
+        false,
+        (stream) => Boolean(stream.url || stream.externalUrl) || canResolve(stream),
+      );
       if (!choice) {
         // Every addon has answered and nothing fits the autoplay rules: hand
         // over to the list, and say why it is there.
@@ -1140,6 +1197,12 @@ export function Details({
       }
       autoSelected = true;
       window.clearTimeout(autoPlayTimer.current);
+      // A torrent resolves first and closes the sheet itself once it plays; a
+      // failed resolve then says why in the sheet rather than behind it.
+      if (canResolve(choice)) {
+        void playSource(choice, video);
+        return;
+      }
       setSourceOpen(false);
       playFresh(choice, video);
     };

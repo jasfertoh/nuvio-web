@@ -1118,6 +1118,10 @@ export type AddonSubtitle = {
   url: string;
   lang: string;
   addonName: string;
+  /** The release it was timed to, where the addon says (OpenSubtitles does). */
+  release?: string;
+  /** OpenSubtitles matched it to the file by hash. */
+  hashMatch?: boolean;
 };
 
 /**
@@ -1177,6 +1181,10 @@ export async function loadAddonSubtitles(
             url: String(entry.url ?? ""),
             lang: String(entry.lang ?? entry.language ?? "und"),
             addonName: addon.manifest!.name,
+            release:
+              String(entry.movieReleaseName ?? entry.subtitleFileName ?? entry.releaseName ?? "").trim() ||
+              undefined,
+            hashMatch: entry.m === "h",
           }))
           .filter((entry) => entry.url);
       } catch {

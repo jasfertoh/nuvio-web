@@ -191,6 +191,7 @@ import {
 import { readDebridRules } from "./lib/webSettings";
 import { applyDebridStreamSettings } from "./lib/debridStreams";
 import { continuationOrder, pickBingeCandidates } from "./lib/nextEpisode";
+import { fetchProxyTracks } from "./lib/proxyTracks";
 import {
   canResolveDebrid,
   needsDebridResolve,
@@ -2707,11 +2708,15 @@ export function App() {
           onPrepareEpisode={(next) => {
             // Resolved while the credits roll, so Next starts on the press.
             if (episodePrep.current?.videoId === next.id) return;
-            episodePrep.current = {
-              videoId: next.id,
-              at: Date.now(),
-              stream: episodeStream(playback, next).catch(() => null),
-            };
+            const stream = episodeStream(playback, next).catch(() => null);
+            episodePrep.current = { videoId: next.id, at: Date.now(), stream };
+            // The proxy probes a source it has not seen before deciding whether
+            // to relay or transcode it - another round trip to a debrid host
+            // slow to first byte, paid before playback can start. Asking now
+            // puts that answer in its cache. It reads headers only.
+            void stream.then((found) => {
+              if (found?.url) void fetchProxyTracks(found.url).catch(() => {});
+            });
           }}
           onPlayEpisode={(next) => {
             const current = playback;
