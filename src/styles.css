@@ -10247,3 +10247,24 @@ html.native-player-active .player-view.native-player.native-player-loading {
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* Seek-bar preview still, above the hover time. */
+.player-seek-hover img {
+  display: block;
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: 0 auto 4px;
+  border-radius: 6px;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.player-seek-hover img.is-loaded {
+  opacity: 1;
+}
+@media (max-width: 760px) {
+  .player-seek-hover img {
+    width: 120px;
+  }
+}

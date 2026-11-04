@@ -49,6 +49,15 @@ function endpoint(path: string, sourceUrl: string, extra = ""): string {
   );
 }
 
+/** The proxy's thumbnails come in 10-second steps; asking within one reuses it. */
+export const THUMBNAIL_STEP_SECONDS = 10;
+
+/** A small still of the source at this point, for the seek bar. "" without a proxy. */
+export function proxyThumbnailUrl(sourceUrl: string, seconds: number): string {
+  const step = Math.round(seconds / THUMBNAIL_STEP_SECONDS) * THUMBNAIL_STEP_SECONDS;
+  return endpoint("thumbnail", sourceUrl, `&t=${step}`);
+}
+
 export async function fetchProxyTracks(
   sourceUrl: string,
   signal?: AbortSignal,

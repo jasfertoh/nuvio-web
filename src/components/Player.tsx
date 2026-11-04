@@ -11,6 +11,7 @@ import { proxiedPlaybackUrl } from "../lib/mediaProxy";
 import { deviceSubtitleFontSize } from "../lib/deviceSubtitleSize.ts";
 import { ensureProxySignature } from "../lib/proxySignature";
 import {
+  proxyThumbnailUrl,
   audioDetail,
   fetchProxySubtitles,
   fetchProxyTracks,
@@ -452,6 +453,10 @@ export function Player({
   // Read by the pause timer, which outlives the render that started it.
   const pausedInfoBlocked = useRef(false);
   const [seekHover, setSeekHover] = useState<{ time: number; left: number } | null>(null);
+  // The still shown over the bar, asked for once the pointer settles so a
+  // sweep across the bar does not request every step it passes.
+  const [seekThumb, setSeekThumb] = useState<{ src: string; loaded: boolean } | null>(null);
+  const seekThumbTimer = useRef(0);
   const [playbackRate, setPlaybackRate] = useState(storedPlaybackRate);
   const [subtitleOpen, setSubtitleOpen] = useState(false);
   /** Text tracks on the element, rebuilt whenever the element's list changes. */
@@ -1369,8 +1374,11 @@ export function Player({
         // was on screen painted over the new stream, and assigning "showing"
         // to a track that is already showing changes nothing - so the stale
         // line stayed there. Going through "disabled" is what drops it.
+        // Every other track is set off too: something else may have turned
+        // one on in the meantime, and two showing draws every line twice.
         window.setTimeout(() => {
-          if (list[chosen]) list[chosen].mode = "showing";
+          for (let index = 0; index < list.length; index += 1)
+            list[index].mode = index === chosen ? "showing" : "disabled";
         }, 50);
         return;
       }
@@ -3275,15 +3283,37 @@ export function Player({
               if (seekLimit <= 0) return;
               const rect = event.currentTarget.getBoundingClientRect();
               const left = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
-              setSeekHover({ time: left * seekLimit, left });
+              const time = left * seekLimit;
+              setSeekHover({ time, left });
+              window.clearTimeout(seekThumbTimer.current);
+              if (url && proxiedPlayback) {
+                seekThumbTimer.current = window.setTimeout(() => {
+                  const src = proxyThumbnailUrl(url, time);
+                  if (src) setSeekThumb((current) => (current?.src === src ? current : { src, loaded: false }));
+                }, 150);
+              }
             }}
-            onPointerLeave={() => setSeekHover(null)}
+            onPointerLeave={() => {
+              window.clearTimeout(seekThumbTimer.current);
+              setSeekHover(null);
+              setSeekThumb(null);
+            }}
           >
           {seekHover && (
             <span
               className="player-seek-hover"
               style={{ "--hover-left": `${seekHover.left * 100}%` } as CSSProperties}
             >
+              {seekThumb && (
+                <img
+                  key={seekThumb.src}
+                  src={seekThumb.src}
+                  alt=""
+                  className={seekThumb.loaded ? "is-loaded" : ""}
+                  onLoad={() => setSeekThumb((current) => current && { ...current, loaded: true })}
+                  onError={() => setSeekThumb(null)}
+                />
+              )}
               {formatTime(seekHover.time)}
             </span>
           )}
