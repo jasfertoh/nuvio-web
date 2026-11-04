@@ -77,6 +77,10 @@ export type Video = {
   /** Which service the score came from, so the badge can be honest about it. */
   ratingSource?: "imdb" | "tmdb";
   available?: boolean;
+  /** The IMDb numbering where an addon maps its own (e.g. Kitsu) onto it. */
+  imdbId?: string;
+  imdbSeason?: number;
+  imdbEpisode?: number;
 };
 export type PluginRow = {
   url: string;
@@ -167,6 +171,7 @@ export type Meta = {
   releaseInfo?: string;
   released?: string;
   imdbRating?: string;
+  imdbId?: string;
   genres: string[];
   runtime?: string;
   cast: Person[];

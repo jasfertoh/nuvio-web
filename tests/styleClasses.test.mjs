@@ -29,6 +29,9 @@ const INTENTIONAL = new Set([
   "integration-hub",
   "plugin-browser-note",
   "subtitle-grid",
+  // The fork's player sets these without rules of its own; kept as hooks.
+  "is-detailed",
+  "subtitle-rail-style",
 ]);
 
 test("every class name used in JSX has a rule in styles.css", () => {

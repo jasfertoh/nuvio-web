@@ -1,3 +1,7 @@
+import {
+  SUBTITLE_FONT_KEYS,
+  type SubtitleFontKey,
+} from "./subtitleFonts.ts";
 import { ACCENT_VALUES } from "./accents.ts";
 import type { Stream } from "../types";
 import type { DebridRules } from "./debridStreams";
@@ -86,8 +90,12 @@ export type WebPlayerSettings = {
   subtitleOutlineEnabled: boolean;
   subtitleOutlineWidth: number;
   subtitleBold: boolean;
+  subtitleFontFamily: SubtitleFontKey;
   subtitleFontSizeSp: number;
   subtitleBottomOffset: number;
+  subtitleLineSpacing: number;
+  /** Resolve torrents through a linked debrid account before playing them. */
+  debridEnabled: boolean;
   subtitleUseForcedSubtitles: boolean;
   subtitleShowOnlyPreferredLanguages: boolean;
   addonSubtitleStartupMode:
@@ -339,18 +347,31 @@ function playerSettings(blob: SettingsBlob | null): WebPlayerSettings {
       10,
     ),
     subtitleBold: booleanValue("subtitle_bold", false),
+    subtitleFontFamily: enumValue(
+      stringValue("subtitle_font_family", "default"),
+      SUBTITLE_FONT_KEYS,
+      "default",
+    ),
     subtitleFontSizeSp: numberIn(
       intValue("subtitle_font_size_sp", 18),
       18,
       6,
       40,
     ),
+    // Wider than the shared key's usual range on purpose: raising subtitles
+    // clear of burned-in text wants more than 100px on a large screen, and a
+    // negative value drops them nearer the bottom edge. Other clients clamp
+    // this to their own range when they read it.
     subtitleBottomOffset: numberIn(
       intValue("subtitle_bottom_offset", 20),
       20,
-      0,
-      100,
+      -200,
+      600,
     ),
+    // Negative tightens the gap between wrapped lines, which is worth having
+    // when the font is large and two lines crowd the picture.
+    subtitleLineSpacing: numberIn(intValue("subtitle_line_spacing", 0), 0, -12, 24),
+    debridEnabled: booleanValue("debrid_enabled", true),
     subtitleUseForcedSubtitles: booleanValue(
       "subtitle_use_forced_subtitles",
       false,

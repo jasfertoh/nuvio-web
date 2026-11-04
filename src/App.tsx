@@ -191,6 +191,11 @@ import {
 import { readDebridRules } from "./lib/webSettings";
 import { applyDebridStreamSettings } from "./lib/debridStreams";
 import {
+  canResolveDebrid,
+  needsDebridResolve,
+  resolveDebridStream,
+} from "./lib/debridResolve";
+import {
   readWebSettings,
   POSTER_DEFAULTS,
   POSTER_SCALE_MAX,
@@ -412,6 +417,9 @@ function sessionProfile(profiles: Profile[]): Profile | undefined {
     return undefined;
   }
 }
+
+/** How long a link found ahead for the next episode is trusted to still play. */
+const PREPARED_LINK_TTL_MS = 15 * 60 * 1000;
 
 export function App() {
   const [booting, setBooting] = useState(true);
@@ -650,28 +658,12 @@ export function App() {
      */
     resumeMs?: number;
   } | null>(null);
-  /**
-   * The other releases of whatever is playing, for the player's own picker.
-   *
-   * Held here rather than in the sources sheet: playback is reached from the
-   * sheet, from Continue Watching and from a remembered link, and only the
-   * first of those ever had a list. Fetched when the picker is first opened,
-   * which for most playback is never.
-   */
-  const [playerSources, setPlayerSources] = useState<Stream[]>([]);
-  const [playerSourcesBusy, setPlayerSourcesBusy] = useState(false);
-  const playerSourceRequest = useRef(0);
-  // Read by the picker's fetch, which must not be rebuilt every time playback
-  // state changes underneath it.
-  const playbackRef = useRef(playback);
-  playbackRef.current = playback;
-  // A different episode is a different set of releases, so what was fetched
-  // for the last one is dropped rather than offered for this one.
-  useEffect(() => {
-    playerSourceRequest.current += 1;
-    setPlayerSources([]);
-    setPlayerSourcesBusy(false);
-  }, [playback?.meta.id, playback?.video?.id]);
+  // The next episode's source, found while the current one ends.
+  const episodePrep = useRef<{
+    videoId: string;
+    at: number;
+    stream: Promise<Stream | null>;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [resolvingContinue, setResolvingContinue] = useState<Meta | null>(null);
   useScrollLock(resolvingContinue !== null);
@@ -1395,25 +1387,6 @@ export function App() {
     [profile],
   );
 
-  /**
-   * The blob keys behind each subtitle style the player can change.
-   *
-   * Kept here rather than in the player: the player asks for a caption to look
-   * a certain way, and where that is written down is this file's business.
-   * These are the same keys the settings page writes, so a change made over
-   * the picture and one made in Settings are the same change.
-   */
-  const SUBTITLE_STYLE_KEYS = {
-    subtitleFontSizeSp: ["subtitle_font_size_sp", "int"],
-    subtitleBottomOffset: ["subtitle_bottom_offset", "int"],
-    subtitleTextColor: ["subtitle_text_color", "string"],
-    subtitleBackgroundColor: ["subtitle_background_color", "string"],
-    subtitleOutlineColor: ["subtitle_outline_color", "string"],
-    subtitleOutlineEnabled: ["subtitle_outline_enabled", "boolean"],
-    subtitleOutlineWidth: ["subtitle_outline_width", "int"],
-    subtitleBold: ["subtitle_bold", "boolean"],
-  } as const satisfies Record<string, readonly [string, SyncPreferenceType]>;
-
   const updateTypedSetting = useCallback(
     (
       feature: string,
@@ -2102,38 +2075,59 @@ export function App() {
   }, []);
 
   /**
-   * Asks every addon for the releases of what is playing.
-   *
-   * Ordered the way the sources sheet orders them, so the picker in the player
-   * lists the same things in the same order as the sheet it stands in for.
-   * Batches are shown as they land rather than at the end: one slow addon
-   * should not decide how long the menu sits empty.
+   * A source the element can play. Addons mostly return torrents - an infoHash
+   * and no url - which are resolved through Torbox when there is a key for it.
    */
-  const loadPlayerSources = useCallback(() => {
-    const current = playbackRef.current;
-    if (!current) return;
-    const request = ++playerSourceRequest.current;
-    setPlayerSources([]);
-    setPlayerSourcesBusy(true);
-    const order = (streams: Stream[]) =>
-      platform.debrid ? applyDebridStreamSettings(streams, debridRules) : streams;
-    void loadStreams(
-      current.meta.type,
-      current.video?.id || current.meta.id,
-      addons,
-      undefined,
-      (_name, _batch, ordered) => {
-        if (request === playerSourceRequest.current) setPlayerSources(order(ordered));
-      },
-    )
-      .then((streams) => {
-        if (request === playerSourceRequest.current) setPlayerSources(order(streams));
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (request === playerSourceRequest.current) setPlayerSourcesBusy(false);
-      });
-  }, [addons, debridRules]);
+  const playableStream = useCallback(
+    async (stream: Stream, video?: Video): Promise<Stream | null> => {
+      if (stream.url || stream.externalUrl) return stream;
+      if (
+        !webSettings.player.debridEnabled ||
+        !needsDebridResolve(stream) ||
+        !canResolveDebrid(providerCredentials)
+      )
+        return null;
+      try {
+        const url = await resolveDebridStream(stream, providerCredentials, {
+          season: video?.season,
+          episode: video?.episode,
+        });
+        return { ...stream, url };
+      } catch {
+        return null;
+      }
+    },
+    [providerCredentials, webSettings.player.debridEnabled],
+  );
+
+  /**
+   * The source to continue a run with: the same pick autoplay would make,
+   * keeping to the binge group so quality, audio and host stay as chosen.
+   */
+  const episodeStream = useCallback(
+    async (current: { meta: Meta; stream: Stream }, next: Video) => {
+      const bingeGroup = current.stream.behaviorHints?.bingeGroup;
+      const order = (streams: Stream[]) =>
+        platform.debrid ? applyDebridStreamSettings(streams, debridRules) : streams;
+      const chosen = await resolveAutoStream(
+        (onBatch) =>
+          loadStreams(current.meta.type, next.id, addons, undefined, (_name, _batch, ordered) =>
+            onBatch(order(ordered)),
+          ).then(order),
+        (streams) =>
+          selectAutoStream(
+            streams,
+            webSettings.player,
+            addons.map((addon) => addon.manifest?.name || addon.name || ""),
+            bingeGroup,
+            true,
+          ),
+        webSettings.player.autoPlayTimeoutSeconds,
+      );
+      return chosen ? playableStream(chosen, next) : null;
+    },
+    [addons, debridRules, playableStream, webSettings.player],
+  );
 
   const openContinueSources = useCallback(
     (card: ContinueCard, startAtBeginning: boolean) => {
@@ -2685,10 +2679,13 @@ export function App() {
           {...playback}
           addons={addons}
           settings={webSettings.player}
-          blurUnwatchedEpisodes={webSettings.metaScreen.blurUnwatchedEpisodes}
-          episodeCardStyle={webSettings.metaScreen.episodeCardStyle}
-          tmdbConfig={metadataEnrichment.tmdb}
-          animeSkipClientId={providerCredential(providerCredentials, "animeskip", "client_id")}
+          profileKey={String(profile?.profileIndex ?? 0)}
+          notice={message}
+          onDismissNotice={() => setMessage("")}
+          providerCredentials={providerCredentials}
+          onPlayerSetting={(key, type, value) =>
+            updateTypedSetting("player_settings", key, type, value)
+          }
           startPositionMs={
             playback.resumeMs != null
               ? playback.resumeMs
@@ -2698,59 +2695,52 @@ export function App() {
           }
           episodes={playback.meta.videos}
           watchIndex={watchIndex}
-          onSubtitleStyle={(patch) => {
-            for (const [name, value] of Object.entries(patch)) {
-              const entry =
-                SUBTITLE_STYLE_KEYS[name as keyof typeof SUBTITLE_STYLE_KEYS];
-              if (!entry || value === undefined) continue;
-              updateTypedSetting("player_settings", entry[0], entry[1], value);
+          onSelectStream={async (next) => {
+            // Same title, same episode, different file. The player reported
+            // where it had got to before raising this, so resume picks it up.
+            const current = playback;
+            const chosen = await playableStream(next, current.video);
+            if (!chosen) {
+              setMessage("That source could not be resolved.");
+              return false;
             }
+            rememberBingeGroup(current.meta.id, chosen.behaviorHints?.bingeGroup);
+            setPlayback({ ...current, stream: chosen, startAtBeginning: false, resumeMs: undefined });
+            return true;
           }}
-          sources={playerSources}
-          streamBadgeSettings={webSettings.streamBadges}
-          sourcesBusy={playerSourcesBusy}
-          onRequestSources={loadPlayerSources}
-          onSelectSource={(next, positionMs) => {
-            // Same title, same episode, different file — so the only things
-            // that change are the release and where it starts.
-            rememberBingeGroup(playback.meta.id, next.behaviorHints?.bingeGroup);
-            setPlayback({
-              ...playback,
-              stream: next,
-              startAtBeginning: false,
-              resumeMs: positionMs,
-            });
+          onPrepareEpisode={(next) => {
+            // Resolved while the credits roll, so Next starts on the press.
+            if (episodePrep.current?.videoId === next.id) return;
+            episodePrep.current = {
+              videoId: next.id,
+              at: Date.now(),
+              stream: episodeStream(playback, next).catch(() => null),
+            };
           }}
           onPlayEpisode={(next) => {
-            // The same source, not a fresh choice. A binge group names a
-            // release that serves a whole run, so continuing within it keeps
-            // the quality, the audio and the host already chosen.
-            const bingeGroup = playback.stream.behaviorHints?.bingeGroup;
             const current = playback;
             // Resolving takes seconds. A second request started meanwhile must
             // not be able to land after this one and pull playback back to an
             // episode already left behind.
             const generation = ++episodeSwitch.current;
             setMessage("");
-            const orderStreams = (streams: Stream[]) => platform.debrid ? applyDebridStreamSettings(streams, debridRules) : streams;
-            void resolveAutoStream(
-              (onBatch) => loadStreams(current.meta.type, next.id, addons, undefined,
-                (_name, _batch, ordered) => onBatch(orderStreams(ordered))).then(orderStreams),
-              (streams) => selectAutoStream(streams, webSettings.player,
-                addons.map((addon) => addon.manifest?.name || addon.name || ""), bingeGroup, true),
-              webSettings.player.autoPlayTimeoutSeconds,
-            ).then((chosen) => {
+            const prepared =
+              episodePrep.current?.videoId === next.id &&
+              Date.now() - episodePrep.current.at < PREPARED_LINK_TTL_MS
+                ? episodePrep.current.stream
+                : null;
+            episodePrep.current = null;
+            const backToDetails = (note?: string) => {
+              setPlayback(null);
+              setDetailLaunch({ video: next, videoId: next.id, openSources: true, startAtBeginning: true });
+              setSelected({ ...current.meta, selectedVideoId: next.id });
+              if (note) setMessage(note);
+            };
+            void (prepared ?? episodeStream(current, next))
+              .then((chosen) => {
                 if (generation !== episodeSwitch.current) return;
-                if (!chosen) {
-                  setPlayback(null);
-                  setDetailLaunch({ video: next, videoId: next.id, openSources: true, startAtBeginning: true });
-                  setSelected({ ...current.meta, selectedVideoId: next.id });
-                  return;
-                }
-                rememberBingeGroup(
-                  current.meta.id,
-                  chosen.behaviorHints?.bingeGroup,
-                );
+                if (!chosen) return backToDetails();
+                rememberBingeGroup(current.meta.id, chosen.behaviorHints?.bingeGroup);
                 setPlayback({
                   mode: current.mode,
                   stream: chosen,
@@ -2761,10 +2751,7 @@ export function App() {
               })
               .catch(() => {
                 if (generation !== episodeSwitch.current) return;
-                setPlayback(null);
-                setDetailLaunch({ video: next, videoId: next.id, openSources: true, startAtBeginning: true });
-                setSelected({ ...current.meta, selectedVideoId: next.id });
-                setMessage("Could not auto-select a source. Please choose one manually.");
+                backToDetails("Could not auto-select a source. Please choose one manually.");
               });
           }}
           onClose={() => {

@@ -19,29 +19,3 @@ test("all loading ring heads and SVG loaders use the selected accent", () => {
     assert.equal(declarations(selector, "color").at(-1), "var(--accent)");
   }
 });
-test("WebKit and Firefox seek/volume tracks, thumbs and primary controls use theme tokens", () => {
-  for (const selector of [
-    '.player-view input[type="range"]::-webkit-slider-runnable-track',
-    '.player-view input[type="range"]::-webkit-slider-thumb',
-    '.player-view input[type="range"]::-moz-range-progress',
-    '.player-view input[type="range"]::-moz-range-thumb',
-    '.volume-slider::-webkit-slider-runnable-track',
-    '.player-control-group .player-play', '.audio-menu > button.selected', '.player-next button.primary',
-  ]) assert.match(declarations(selector, "background").at(-1), /var\(--accent\)/);
-  assert.equal(declarations('.player-control-group .player-play', 'color').at(-1), 'var(--accent-ink)');
-});
-test("both player locations use solid playback glyphs, not outline icons", () => {
-  const player = readFileSync(new URL("../src/components/Player.tsx", import.meta.url), "utf8");
-  const icons = readFileSync(new URL("../src/components/PlaybackIcons.tsx", import.meta.url), "utf8");
-  // Named rather than counted: outline glyphs belong elsewhere in the player
-  // — a source row's fallback badge is the sheet's own outline Play — and a
-  // total would break every time one of those is added.
-  const centre = /className="player-center"[\s\S]*?<\/button>/.exec(player);
-  assert.ok(centre, "no centre button found");
-  assert.match(centre[0], /<SolidPlay \/>/);
-  assert.match(
-    player,
-    /className="player-play"[\s\S]*?playing \? <SolidPause \/> : <SolidPlay \/>/,
-  );
-  assert.equal((icons.match(/fill="currentColor" stroke="none"/g) ?? []).length, 2);
-});

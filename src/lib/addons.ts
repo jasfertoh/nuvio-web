@@ -1,3 +1,4 @@
+import { idForPrefixes } from "./subtitleIds.ts";
 import { resolveTmdbSource } from "./tmdbCollections";
 import {
   createHostCooldown,
@@ -226,6 +227,11 @@ function episodeRating(value: Record<string, unknown>): string | undefined {
   return Number.isFinite(score) && score > 0 ? String(raw) : undefined;
 }
 
+/** Only a real IMDb id; anything else would be sent to addons as if it were. */
+function imdbIdOf(value: unknown): string | undefined {
+  return typeof value === "string" && /^tt\d+$/.test(value) ? value : undefined;
+}
+
 function mapVideo(value: Record<string, unknown>): Video {
   return {
     id: String(value.id ?? ""),
@@ -240,6 +246,10 @@ function mapVideo(value: Record<string, unknown>): Video {
     // Only an addon-supplied score is an IMDb one; enrichment marks its own.
     ratingSource: episodeRating(value) ? "imdb" : undefined,
     available: value.available !== false,
+    imdbId: imdbIdOf(value.imdb_id),
+    imdbSeason: value.imdbSeason == null ? undefined : Number(value.imdbSeason),
+    imdbEpisode:
+      value.imdbEpisode == null ? undefined : Number(value.imdbEpisode),
   };
 }
 
@@ -375,6 +385,7 @@ export function mapMeta(
     releaseInfo: value.releaseInfo ? String(value.releaseInfo) : undefined,
     released: value.released ? String(value.released) : undefined,
     imdbRating: value.imdbRating ? String(value.imdbRating) : undefined,
+    imdbId: imdbIdOf(value.imdb_id),
     genres: Array.isArray(value.genres) ? value.genres.map(String) : [],
     runtime: value.runtime ? String(value.runtime) : undefined,
     cast,
@@ -1100,6 +1111,86 @@ export async function loadSubtitles(
         .map((subtitle) => [subtitle.url, subtitle] as const),
     ).values(),
   ];
+}
+
+export type AddonSubtitle = {
+  id: string;
+  url: string;
+  lang: string;
+  addonName: string;
+};
+
+/**
+ * Subtitles offered by the installed addons.
+ *
+ * These are standalone files - a few tens of kilobytes fetched directly -
+ * which is why they appear in a moment, where pulling the subtitles embedded
+ * in the video means demuxing the whole file. Addons are asked first for that
+ * reason; extraction is the fallback for what none of them carry.
+ *
+ * `filename` is passed where the stream knows it: OpenSubtitles and others use
+ * it to pick the release that actually matches, rather than one timed to a
+ * different cut.
+ */
+export async function loadAddonSubtitles(
+  type: string,
+  ids: string[],
+  addons: InstalledAddon[],
+  { filename, signal }: { filename?: string; signal?: AbortSignal } = {},
+): Promise<AddonSubtitle[]> {
+  const targets = addons.filter(
+    (addon) =>
+      addon.enabled &&
+      addon.manifest &&
+      supports(addon.manifest, "subtitles", type),
+  );
+  const groups = await Promise.all(
+    targets.map(async (addon) => {
+      // Each addon is asked with the first of `ids` it declares support for;
+      // for anime that is often the IMDb mapping, not the catalog's Kitsu id.
+      const resource = addon.manifest!.resources?.find(
+        (item) => typeof item !== "string" && item.name === "subtitles",
+      );
+      const id = idForPrefixes(
+        ids,
+        (typeof resource === "object" ? resource.idPrefixes : undefined) ??
+          addon.manifest!.idPrefixes,
+      );
+      if (!id) return [];
+      try {
+        const payload = await fetchJson<{
+          subtitles?: Array<Record<string, unknown>>;
+        }>(
+          resourceUrl(
+            addon.url,
+            "subtitles",
+            type,
+            id,
+            filename ? { filename } : {},
+          ),
+          15_000,
+          signal,
+        );
+        return (payload.subtitles ?? [])
+          .map((entry, index): AddonSubtitle => ({
+            id: String(entry.id ?? `${addon.url}:${index}`),
+            url: String(entry.url ?? ""),
+            lang: String(entry.lang ?? entry.language ?? "und"),
+            addonName: addon.manifest!.name,
+          }))
+          .filter((entry) => entry.url);
+      } catch {
+        // One addon being unreachable should not cost the others.
+        return [];
+      }
+    }),
+  );
+  const seen = new Set<string>();
+  return groups.flat().filter((entry) => {
+    if (seen.has(entry.url)) return false;
+    seen.add(entry.url);
+    return true;
+  });
 }
 
 export type DiscoverCatalog = {

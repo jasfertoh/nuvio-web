@@ -1169,8 +1169,7 @@ a {
   margin: 5px 0 18px;
   font-size: 30px;
 }
-.episodes select,
-.player-episodes select {
+.episodes select {
   background: #1b2025;
   color: white;
   border: 1px solid #30373f;
@@ -1605,36 +1604,6 @@ a {
 }
 /* Names the picture mode after a change, then goes. Centred over the video and
    inert, so it never intercepts a click meant for the controls. */
-.picture-note {
-  /* Fixed, not absolute. Absolute depends on which ancestor happens to be
-     positioned, and in the native player it was resolving against something
-     other than the player view and landing at the top of the screen. The
-     player fills the window, so the viewport is the right frame anyway. */
-  position: fixed;
-  z-index: 240;
-  /* Above the controls rather than over the middle of the picture: it is a
-     confirmation of what you just pressed, and the thing you want to look at
-     while pressing it is the framing behind it. */
-  bottom: 150px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 14px 26px;
-  border-radius: 14px;
-  background: rgb(6 8 11 / 0.82);
-  border: 1px solid rgb(255 255 255 / 0.12);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: #f2f5f8;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-}
-@media (max-width: 760px) {
-  .picture-note {
-    bottom: 120px;
-  }
-}
 @media (min-width: 1000px) {
   /* The artwork only where there is room for it beside the list. On a phone
      the list uses the full width, and the lightest part of the gradient would
@@ -1815,28 +1784,6 @@ a {
   }
   .source-sheet-refresh { flex: 0 0 auto; }
 }
-
-.player-diagnostics {
-  position: absolute;
-  z-index: 25;
-  top: max(84px, env(safe-area-inset-top));
-  right: 24px;
-  width: min(420px, calc(100% - 48px));
-  max-height: calc(100% - 180px);
-  overflow-y: auto;
-  padding: 18px;
-  border: 1px solid var(--episodes-line);
-  border-radius: 20px;
-  background: var(--episodes-bg);
-  color: var(--text);
-  font-size: 14px;
-}
-.player-diagnostics header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.player-diagnostics header button { display: grid; place-items: center; padding: 8px; border-radius: 50%; background: var(--episodes-field); color: inherit; }
-.player-diagnostics dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.player-diagnostics dt, .player-diagnostics p { color: var(--muted); }
-.player-diagnostics dd { margin: 0; overflow-wrap: anywhere; }
-.player-diagnostics p { line-height: 1.5; margin-bottom: 0; }
 /* Keep navigation beside the title, then give the filters a full row of their
    own. Long show names can now ellipsise without pushing either picker or the
    refresh action outside the sheet. */
@@ -2058,152 +2005,11 @@ a {
 .source-main small {
   color: #707b86;
 }
-.player-view {
-  position: fixed;
-  z-index: 200;
-  inset: 0;
-  background: #000;
-  display: grid;
-  place-items: center;
-}
-.player-view video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-}
-.player-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: max(20px, env(safe-area-inset-top)) 22px 80px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  background: linear-gradient(#000d, transparent);
-  pointer-events: none;
-}
 /* Pushed to the far end of the bar, clear of the title beside it. */
-.player-ends-at {
-  margin-left: auto;
-  padding: 6px 12px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: #d9dde1;
-  background: #0b0e1199;
-  white-space: nowrap;
-}
-@media (max-width: 760px) {
-  .player-ends-at {
-    font-size: 11px;
-    padding: 5px 9px;
-  }
-}
-.player-top button {
-  pointer-events: auto;
-}
-.player-top strong,
-.player-top small {
-  display: block;
-}
-.player-top small {
-  color: #a5adb6;
-}
-.player-status {
-  position: absolute;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  background: #15191ddd;
-  padding: 12px 16px;
-  border-radius: 12px;
-}
 /* Playback is working; something about it is not. The error panel says the
    opposite — "unavailable" — so this is its own thing: a line above the
    controls, dismissible, that does not take the screen. */
-.player-notice {
-  position: absolute;
-  left: 50%;
-  bottom: 120px;
-  transform: translateX(-50%);
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: min(640px, calc(100% - 32px));
-  padding: 12px 16px;
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  background: rgb(6 8 11 / 0.92);
-  color: var(--text, #f5f7f8);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.player-notice button {
-  flex: none;
-  border: 0;
-  border-radius: 10px;
-  padding: 7px 12px;
-  background: #20252b;
-  color: white;
-  font-weight: 700;
-  cursor: pointer;
-}
-.player-error {
-  /* Centred on the player rather than left wherever flow put it. */
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 8;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  width: min(560px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
-  overflow-y: auto;
-  padding: 26px;
-  background: #171b20f2;
-  border: 1px solid #333b44;
-  border-radius: 18px;
-  text-align: center;
-}
-.player-error p {
-  color: #aab2bb;
-}
 /* Selectable and tappable: the message is the diagnosis. */
-.player-error-message {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #2b333c;
-  border-radius: 10px;
-  background: #0e1216;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  user-select: text;
-  -webkit-user-select: text;
-}
-.player-error-message:hover { border-color: #46505b; }
-.player-error-hint { color: #6f7883; font-size: 11px; }
-.player-error > div {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-.player-error a,
-.player-error button {
-  border: 0;
-  border-radius: 10px;
-  background: #292f36;
-  padding: 10px 12px;
-  display: flex;
-  gap: 7px;
-  text-decoration: none;
-}
 .auth-screen {
   /* 100vh on iOS measures the screen, not the visible viewport, so the page
      ended up taller than what you can see and scrolled by exactly the browser
@@ -2970,18 +2776,6 @@ a {
   .addon-row code {
     max-width: 55vw;
   }
-  .player-error {
-    margin: 20px;
-  }
-  .player-top {
-    padding-left: 14px;
-  }
-  .player-top strong {
-    max-width: 240px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 @media (max-width: 420px) {
   .poster-grid {
@@ -3127,459 +2921,47 @@ input[type="password"]::-ms-clear {
 }
 
 /* Custom video controls: stable colors, independent of browser control styling. */
-.player-view {
-  display: block;
-  cursor: default;
-  color: #fff;
-  color-scheme: dark;
-  background: #000;
-  isolation: isolate;
-}
-.player-view:fullscreen,
-.player-view:-webkit-full-screen {
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  background: #000;
-}
-.player-view::backdrop {
-  background: #000;
-}
 /* libmpv renders into the Tauri window below WebView2.  Only the native
    player route makes the web surface transparent; the browser/PWA route keeps
    its solid black video canvas.  The controls and shades remain ordinary DOM
    above the picture, so both clients still share the same player chrome. */
-html.native-player-active,
-html.native-player-active body,
-html.native-player-active #root,
-html.native-player-active .app-shell,
-html.native-player-active .player-view.native-player {
-  background: transparent !important;
-}
 /* The native child window is not guaranteed to have painted while libmpv is
    opening a URL.  Cover it with a real opaque WebView layer until
    MPV_EVENT_PLAYBACK_RESTART says the first frame is ready. */
-html.native-player-active .player-view.native-player.native-player-loading {
-  background: #000 !important;
-}
 /* Remain opaque while fullscreen is restored and mpv tears down. This class
    also protects unmounts/source switches; only a ready native frame clears it. */
-html.native-player-active.native-player-covered,
-html.native-player-active.native-player-covered body,
-html.native-player-active.native-player-covered #root,
-html.native-player-active.native-player-covered .app-shell,
-html.native-player-active.native-player-covered .player-view.native-player {
-  background: #000 !important;
-}
-.player-view.native-player video,
-.player-view.native-player .player-canvas {
-  display: none !important;
-}
 /*
  * Keep the resolved page mounted so Back is instant, but do not leave its
  * backdrop, cast gallery, and trailer thumbnails composited underneath video.
  * Those hidden render surfaces are expensive enough for iOS to terminate the
  * standalone PWA during an otherwise healthy remux session.
  */
-.app-shell.player-active > :not(.player-view) {
-  display: none !important;
-}
-.player-view video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-  object-position: center center;
-}
-.player-subtitle-overlay {
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  width: min(88%, 1100px);
-  transform: translateX(-50%);
-  text-align: center;
-  white-space: pre-line;
-  line-height: 1.35;
-  pointer-events: none;
-  transition: bottom 0.2s ease;
-}
-.player-subtitle-overlay > span {
-  padding: 2px 5px;
-  border-radius: 3px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.subtitle-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.subtitle-loading svg {
-  width: 17px;
-  height: 17px;
-}
 /* New HDR-aware browsers can deliberately cap an HDR surface at reference
    white. Older browsers ignore this declaration and continue using their own
    color-management path. */
-.player-hdr-limited {
-  dynamic-range-limit: standard;
-}
 /*
  * Audible HTML video is surfaced by iOS in Dynamic Island/Now Playing and the
  * web cannot suppress that system indicator. Keep moving picture content out
  * from immediately beneath the sensor area so it no longer appears to bleed
  * through or visually compete with the indicator in the installed PWA.
  */
-@media (max-width: 760px) {
-  .player-view::before {
-    content: "";
-    position: absolute;
-    z-index: 2;
-    inset: 0 0 auto;
-    height: max(env(safe-area-inset-top), 0px);
-    background: #000;
-    pointer-events: none;
-  }
-}
-.player-shade {
-  position: absolute;
-  z-index: 1;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-.player-shade-top {
-  top: 0;
-  height: 180px;
-  background: linear-gradient(#000d, transparent);
-}
-.player-shade-bottom {
-  bottom: 0;
-  height: 260px;
-  background: linear-gradient(transparent, #000e);
-}
-.player-top {
-  z-index: 3;
-  background: none;
-  transition: opacity 0.2s ease;
-}
 /* The accent glyph on a solid black disc: it only ever shows while paused, and
    a still frame can be any colour at all under it. Opaque rather than tinted,
    so the glyph never has to compete with whatever it is resting on. */
-.player-center {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  top: 50%;
-  width: 96px;
-  height: 96px;
-  transform: translate(-50%, -50%);
-  border: 0;
-  border-radius: 50%;
-  background: #000;
-  color: var(--accent);
-  box-shadow: 0 10px 34px #000a;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition:
-    opacity 0.2s ease,
-    transform 0.15s ease;
-}
-.player-center:hover {
-  transform: translate(-50%, -50%) scale(1.05);
-}
 /* The spinner is not a button and takes no disc — a black circle around a
    loading ring would read as something to press. */
-.player-center-busy {
-  pointer-events: none;
-  background: none;
-  box-shadow: none;
-}
-.player-center-busy:hover {
-  transform: translate(-50%, -50%);
-}
-.player-center-busy svg {
-  width: 52px;
-  height: 52px;
-}
 /* The last step of autoplay's sequence, under the spinner. */
-.player-starting {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  color: #e8ebef;
-  font-size: 14px;
-  font-weight: 600;
-  text-shadow: 0 1px 8px #000c;
-}
-.player-center svg {
-  width: 64px;
-  height: 64px;
-}
-.player-status {
-  z-index: 4;
-  left: 50%;
-  top: calc(50% + 58px);
-  transform: translateX(-50%);
-  font-size: 13px;
-  background: #111820e8;
-}
-.player-controls {
-  position: absolute;
-  z-index: 3;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 20px max(24px, env(safe-area-inset-right))
-    max(22px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-  transition: opacity 0.2s ease;
-}
-.player-timeline {
-  display: grid;
-  grid-template-columns: 58px 1fr 58px;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: #d9dde1;
-}
-.player-timeline span:last-child {
-  text-align: right;
-}
-.player-seek-control {
-  position: relative;
-  min-width: 0;
-}
-.player-seek-control > input {
-  width: 100%;
-}
-.player-seek-thumbnail {
-  position: absolute;
-  z-index: 2;
-  left: clamp(80px, var(--thumbnail-left), calc(100% - 80px));
-  bottom: 28px;
-  width: 160px;
-  overflow: hidden;
-  border: 1px solid #ffffff30;
-  border-radius: 10px;
-  background: #050607;
-  box-shadow: 0 10px 30px #000c;
-  pointer-events: none;
-  transform: translateX(-50%);
-}
-.player-seek-thumbnail img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-}
-.player-seek-thumbnail span {
-  display: block;
-  padding: 4px 7px 5px;
-  color: #fff;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  text-align: center !important;
-}
-.player-view input[type="range"] {
-  appearance: none;
-  height: 18px;
-  background: transparent;
-  cursor: pointer;
-  margin: 0;
-}
-.player-view input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--accent) 0 var(--played, 0%),
-    #ffffff45 var(--played, 0%) 100%
-  );
-}
-.player-view input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent-gradient, var(--accent));
-  box-shadow: 0 1px 5px #0008;
-}
-.player-view input[type="range"]::-moz-range-track {
-  height: 4px;
-  border-radius: 4px;
-  background: #ffffff45;
-}
-.player-view input[type="range"]::-moz-range-progress {
-  height: 4px;
-  border-radius: 4px;
-  background: var(--accent-gradient, var(--accent));
-}
-.player-view input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent-gradient, var(--accent));
-}
-.player-control-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-top: 10px;
-}
-.player-control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.player-control-group button {
-  position: relative;
-  min-width: 44px;
-  height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 13px;
-  background: none;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  cursor: pointer;
-}
-.player-control-group button:hover {
-  background: #ffffff1f;
-}
-.player-control-group button.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-.player-control-group button svg {
-  width: 21px;
-  height: 21px;
-}
-.player-control-group .player-play {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--accent-gradient, var(--accent));
-  color: var(--accent-ink);
-}
-.player-control-group .player-play:hover {
-  background: color-mix(in srgb, var(--accent) 86%, white);
-}
-.player-control-group .player-play svg {
-  width: 25px;
-  height: 25px;
-}
-.volume-slider {
-  width: 100px;
-}
-.volume-slider::-webkit-slider-runnable-track {
-  background: linear-gradient(
-    90deg,
-    var(--accent) 0 var(--played, 100%),
-    #ffffff45 var(--played, 100%) 100%
-  ) !important;
-}
-.audio-picker,
-.external-player-picker {
-  position: relative;
-}
 /* Eight rows and then scroll. A release can carry forty subtitle tracks, and
    an unbounded menu ran off the top of the window with the first entries
    unreachable. 8 * 36px of rows plus the heading. */
-.subtitle-menu {
-  max-height: 344px;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  scrollbar-width: thin;
-}
 /* The episodes panel's ground, a shade off opaque so a bright frame still
    shows through the edges of a menu resting on it. */
-.audio-menu,
-.external-player-menu {
-  position: absolute;
-  right: 0;
-  bottom: 56px;
-  width: min(330px, calc(100vw - 30px));
-  padding: 14px;
-  background: color-mix(in srgb, var(--episodes-bg) 97%, transparent);
-  border: 1px solid var(--episodes-line);
-  border-radius: 16px;
-  box-shadow: 0 18px 50px #000b;
-  display: grid;
-  gap: 7px;
-}
-.audio-menu > strong,
-.external-player-menu > strong {
-  padding: 4px 7px 8px;
-}
-.audio-menu > button,
-.external-player-menu > button {
-  justify-content: flex-start;
-  width: 100%;
-  height: 38px;
-  border-radius: 9px;
-}
-.audio-menu > button.selected {
-  background: var(--accent-gradient, var(--accent));
-  color: var(--accent-ink);
-}
 /* Both menus, so the two do not behave differently side by side. Hover only:
    a touch device has none, and the selected row keeps its own fill. */
-.audio-menu > button:not(.selected):hover,
-.external-player-menu > button:hover {
-  background: var(--episodes-hover);
-}
-.audio-menu p,
-.audio-menu small {
-  margin: 3px 7px;
-  color: #a4adb7;
-  line-height: 1.45;
-}
 /* ---- The player's source picker ---------------------------------------- */
 /* A panel in the middle of the picture rather than a menu in the corner of
    the controls: these are the sheet's rows, and they run long, carry badges,
    and there can be forty of them. */
-.player-sources-scrim {
-  position: absolute;
-  z-index: 6;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: max(20px, env(safe-area-inset-top)) 16px
-    max(20px, env(safe-area-inset-bottom));
-  background: #0009;
-  -webkit-backdrop-filter: blur(10px) saturate(1.05);
-  backdrop-filter: blur(10px) saturate(1.05);
-}
-.player-sources {
-  display: flex;
-  flex-direction: column;
-  width: min(680px, 100%);
-  max-height: 100%;
-  min-height: 0;
-  padding: 20px 20px 6px;
-  border: 1px solid var(--episodes-line);
-  border-radius: 22px;
-  background: var(--episodes-bg);
-  box-shadow: 0 28px 90px #000c;
-  animation: player-sources-in 0.16s ease-out;
-}
 @keyframes player-sources-in {
   from {
     opacity: 0;
@@ -3590,231 +2972,25 @@ html.native-player-active.native-player-covered .player-view.native-player {
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .player-sources {
-    animation: none;
-  }
-}
-.player-sources > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex: 0 0 auto;
-}
-.player-sources > header strong {
-  display: block;
-  overflow: hidden;
-  font-size: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* The list is the scroller, so the heading stays put through forty rows.
    Content-sized rows for the same reason the sheet's list needs them: a grid
    handed a definite height divides it between its auto rows, which squashed
    every card to a quarter of the panel and clipped the release name. */
-.player-sources > .source-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  align-content: start;
-  grid-auto-rows: max-content;
-  margin-top: 16px;
-  padding-bottom: 14px;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  scrollbar-color: #34353a #080809;
-  scrollbar-width: thin;
-}
 /* The sheet's cards read as white-on-blur; on this ground they need their own
    fill, or they disappear into it. */
-.player-sources .source-list article {
-  border-color: var(--episodes-field-line);
-  background: var(--episodes-raised);
-}
-@media (hover: hover) and (pointer: fine) {
-  .player-sources .source-list article:hover {
-    border-color: #33343a;
-    background: var(--episodes-hover);
-  }
-}
 /* What is playing: named in its own row rather than pinned above the list, so
    there is one of everything and the order stays the addons' own. */
-.player-sources .source-list article.is-playing {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 13%, var(--episodes-raised));
-}
-.player-sources .source-list article.is-playing .source-main {
-  cursor: default;
-}
-.player-sources .source-list article.is-playing small {
-  color: var(--accent);
-}
-.player-sources .source-main:disabled {
-  cursor: default;
-}
-.player-sources .source-main > span svg {
-  width: 17px;
-  height: 17px;
-  color: #aeb7c0;
-}
-@media (max-width: 760px) {
-  .player-sources {
-    width: 100%;
-    padding: 16px 14px 4px;
-    border-radius: 18px;
-  }
-  .player-sources > header strong {
-    font-size: 16px;
-  }
-}
-.audio-menu a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 10px;
-  border-radius: 9px;
-  background: var(--episodes-field);
-  border: 1px solid var(--episodes-field-line);
-  text-decoration: none;
-}
-.audio-menu a svg {
-  width: 17px;
-}
 /* ---- The settings cog -------------------------------------------------- */
 /* A list you step into and back out of, in one panel, rather than a button
    per setting along the control bar. */
-.settings-menu {
-  width: min(340px, calc(100vw - 30px));
-  max-height: min(64vh, 440px);
-  overflow-y: auto;
-  overscroll-behavior: none;
-  scrollbar-width: thin;
-  gap: 2px;
-}
 /* Name on the left, what it is set to on the right — so the list answers what
    everything is without opening anything. */
-.player-control-group .settings-menu > .settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  width: 100%;
-  min-height: 44px;
-  height: auto;
-  padding: 8px 10px;
-  border-radius: 9px;
-  text-align: left;
-  cursor: pointer;
-}
 /* A glyph then the name, so a row is recognisable at a glance rather than
    only by reading it — which is what a menu opened mid-scene is for. */
-.settings-menu > .settings-row > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.settings-menu > .settings-row > span > svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: #97a1ac;
-}
 /* Lit with the row it belongs to, so a switch that is on reads as on from its
    icon as well as from its track. */
-.settings-switch:has(input:checked) > span > svg {
-  color: var(--accent);
-}
-.settings-menu > .settings-row > em {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: #97a1ac;
-  font-size: 12px;
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.settings-menu > .settings-row > em svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-}
-.player-control-group .settings-menu > .settings-row:hover {
-  background: var(--episodes-hover);
-}
 /* The heading of a page, and the way back out of it. */
-.player-control-group .settings-menu > .settings-back {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  width: 100%;
-  min-height: 40px;
-  height: auto;
-  margin-bottom: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--episodes-field-line);
-  border-radius: 0;
-  text-align: left;
-  cursor: pointer;
-}
-.settings-menu > .settings-back svg {
-  flex: none;
-  width: 17px;
-  height: 17px;
-}
-.settings-menu > .settings-back strong {
-  font-size: 13px;
-}
-.player-control-group .settings-menu > .settings-back:hover {
-  background: none;
-  color: var(--accent);
-}
 /* The app's own switch shape, at the size the rest of the player uses. */
-.settings-switch input {
-  appearance: none;
-  flex: 0 0 auto;
-  width: 40px;
-  height: 23px;
-  margin: 0;
-  border: 1px solid var(--episodes-field-line);
-  border-radius: 999px;
-  background: #26272b;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.settings-switch input::after {
-  content: "";
-  display: block;
-  width: 17px;
-  height: 17px;
-  margin: 2px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s ease;
-}
-.settings-switch input:checked {
-  background: var(--accent-gradient, var(--accent));
-}
-.settings-switch input:checked::after {
-  transform: translateX(17px);
-}
-.settings-switch input:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-.settings-switch:has(input:disabled) > span {
-  opacity: 0.5;
-}
 
 /* ---- Dropdowns --------------------------------------------------------- */
 /* The list a select opens, drawn by the app instead of by the platform. Only
@@ -3935,184 +3111,12 @@ html.native-player-active.native-player-covered .player-view.native-player {
 }
 
 /* ---- Caption customiser ------------------------------------------------ */
-.caption-style-menu {
-  width: min(340px, calc(100vw - 30px));
-}
 /* A line of the thing being changed, drawn from the same values as the cue
    stylesheet — so the effect is visible without hunting for a caption. */
-.caption-style-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 62px;
-  margin: 2px 0 8px;
-  padding: 10px;
-  border: 1px solid var(--episodes-field-line);
-  border-radius: 10px;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      #16171a 0 8px,
-      #101114 8px 16px
-    );
-  line-height: 1.3;
-  text-align: center;
-}
-.caption-style-preview > span {
-  padding: 2px 6px;
-  border-radius: 4px;
-}
 /* Minus, value, plus — the shape of every number in this panel. */
-.caption-style-step > em {
-  gap: 4px;
-}
-.player-control-group .caption-style-step > em > button {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--episodes-field-line);
-  border-radius: 8px;
-  background: var(--episodes-field);
-  color: inherit;
-}
-.player-control-group .caption-style-step > em > button:hover:not(:disabled) {
-  background: var(--episodes-hover);
-}
-.player-control-group .caption-style-step > em > button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.caption-style-step > em > button svg {
-  width: 14px;
-  height: 14px;
-}
-.caption-style-step > em > i {
-  min-width: 26px;
-  color: #e7ebef;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.caption-style-swatches {
-  display: grid;
-  gap: 7px;
-  padding: 8px 10px 4px;
-}
-.caption-style-swatches > small {
-  margin: 0;
-  color: #97a1ac;
-  font-size: 11px;
-}
-.caption-style-swatches > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.player-control-group .caption-style-swatches button {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid #ffffff2e;
-  border-radius: 50%;
-  background: var(--swatch);
-}
 /* Transparent has nothing to show, so it is drawn as a crossed-out circle
    rather than as a hole the ground shows through. */
-.player-control-group .caption-style-swatches button.is-none {
-  background:
-    linear-gradient(
-      45deg,
-      transparent calc(50% - 1px),
-      #d0555f calc(50% - 1px) calc(50% + 1px),
-      transparent calc(50% + 1px)
-    ),
-    var(--episodes-field);
-}
-.player-control-group .caption-style-swatches button.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.controls-hidden {
-  cursor: none;
-}
-.controls-hidden .player-top,
-.controls-hidden .player-controls,
-.controls-hidden .player-center,
-.controls-hidden .player-shade {
-  opacity: 0;
-  pointer-events: none;
-}
-.controls-visible .player-top,
-.controls-visible .player-controls,
-.controls-visible .player-center,
-.controls-visible .player-shade {
-  opacity: 1;
-}
 @media (max-width: 760px) {
-  .player-top {
-    padding-top: max(12px, env(safe-area-inset-top));
-  }
-  .player-top .circle-button {
-    width: 44px;
-    height: 44px;
-  }
-  .player-center {
-    width: 68px;
-    height: 68px;
-  }
-  .player-center svg {
-    width: 44px;
-    height: 44px;
-  }
-  .player-center-busy svg {
-    width: 38px;
-    height: 38px;
-  }
-  .player-controls {
-    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
-  }
-  .player-timeline {
-    grid-template-columns: 45px 1fr 45px;
-    gap: 7px;
-    font-size: 10px;
-  }
-  .player-control-row {
-    margin-top: 5px;
-  }
-  .player-control-group {
-    gap: 3px;
-  }
-  .player-control-group button {
-    min-width: 34px;
-    height: 36px;
-    padding: 0 6px;
-  }
-  .player-control-group button svg {
-    width: 19px;
-    height: 19px;
-  }
-  .player-control-group .player-play {
-    width: 44px;
-    height: 44px;
-  }
-  .volume-slider {
-    display: none;
-  }
-  .audio-picker button span,
-  .external-player-picker button span {
-    display: none;
-  }
-  .player-control-right {
-    margin-left: auto;
-  }
-  .player-status {
-    max-width: 80vw;
-    text-align: center;
-  }
   .theme-row {
     gap: 12px;
   }
@@ -5949,58 +4953,6 @@ body.is-locked {
 /* ---- Player warning ---------------------------------------------------- */
 /* A banner rather than the error panel: the video is still playing, it just
    has no sound, so the page must stay usable. */
-.player-warning {
-  position: absolute;
-  z-index: 6;
-  top: max(78px, calc(env(safe-area-inset-top) + 74px));
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  max-width: min(620px, calc(100vw - 32px));
-  padding: 12px 14px;
-  border: 1px solid #4c3a22;
-  border-radius: 13px;
-  background: rgba(38, 28, 16, 0.94);
-  color: #f0dcc0;
-  font-size: 13px;
-  line-height: 1.45;
-  transform: translateX(-50%);
-}
-.player-warning a,
-.player-warning .warning-action {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 11px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.12);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-}
-.player-warning .warning-action {
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-}
-.player-warning > button {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font-size: 19px;
-  line-height: 1;
-  cursor: pointer;
-}
-@media (max-width: 760px) {
-  .player-warning {
-    flex-wrap: wrap;
-    font-size: 12px;
-  }
-}
 
 
 /* Shown in place of the grid while a catalog's first page is in flight. */
@@ -6140,15 +5092,6 @@ body.is-locked {
   .update-modal-actions button {
     flex: 1;
   }
-}
-
-.player-warning .warning-action {
-  min-height: 34px;
-  padding: 8px 13px;
-  background: rgba(255, 255, 255, 0.16);
-}
-.player-warning .warning-action:hover {
-  background: rgba(255, 255, 255, 0.26);
 }
 
 /* ---- Hero carousel ----------------------------------------------------- */
@@ -8319,9 +7262,7 @@ body.is-locked {
      same row: a 145px still, and an overview given two wrapped lines instead
      of one truncated to an ellipsis. */
   .detail-view.has-episode-panel .episode-list > button,
-  .detail-view.has-episode-panel .episode-list.is-list > button,
-  .player-episodes .episode-list > button,
-  .player-episodes .episode-list.is-list > button {
+  .detail-view.has-episode-panel .episode-list.is-list > button {
     grid-template-columns: 145px minmax(0, 1fr);
     min-height: 98px;
     gap: 0;
@@ -8332,25 +7273,19 @@ body.is-locked {
     transition: background 130ms ease;
   }
   .detail-view.has-episode-panel .episode-list > button:hover,
-  .detail-view.has-episode-panel .episode-list > button:focus-visible,
-  .player-episodes .episode-list > button:hover,
-  .player-episodes .episode-list > button:focus-visible {
+  .detail-view.has-episode-panel .episode-list > button:focus-visible {
     background: var(--episodes-hover);
   }
   .detail-view.has-episode-panel .episode-thumb,
-  .detail-view.has-episode-panel .episode-list.is-list .episode-thumb,
-  .player-episodes .episode-thumb,
-  .player-episodes .episode-list.is-list .episode-thumb {
+  .detail-view.has-episode-panel .episode-list.is-list .episode-thumb {
     width: 145px;
     height: 82px;
   }
-  .detail-view.has-episode-panel .episode-row > span:not(.episode-thumb),
-  .player-episodes .episode-row > span:not(.episode-thumb) {
+  .detail-view.has-episode-panel .episode-row > span:not(.episode-thumb) {
     align-content: center;
     padding: 5px 11px;
   }
-  .detail-view.has-episode-panel .episode-list p,
-  .player-episodes .episode-list p {
+  .detail-view.has-episode-panel .episode-list p {
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
@@ -8361,13 +7296,11 @@ body.is-locked {
     line-height: 1.42;
     white-space: normal;
   }
-  .detail-view.has-episode-panel .episode-list strong,
-  .player-episodes .episode-list strong {
+  .detail-view.has-episode-panel .episode-list strong {
     font-size: 13px;
     line-height: 1.2;
   }
-  .detail-view.has-episode-panel .episode-list small,
-  .player-episodes .episode-list small {
+  .detail-view.has-episode-panel .episode-list small {
     color: #92959b;
     font-size: 9px;
     font-weight: 700;
@@ -9083,94 +8016,14 @@ body.is-locked {
 
 /* The decoding player draws here. Sized and fitted exactly as the video
    element it stands in for, so switching between them is invisible. */
-.player-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: #000;
-  object-position: center center;
-}
 
 /* ---- Up next, and the episode list ------------------------------------ */
 /* Sits above the controls rather than over the picture, so the last minute of
    an episode is still watchable while it is showing. */
-.player-next {
-  position: absolute;
-  z-index: 4;
-  right: max(24px, env(safe-area-inset-right));
-  bottom: 118px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  max-width: min(460px, calc(100vw - 40px));
-  padding: 13px 15px;
-  border: 1px solid #ffffff1f;
-  border-radius: 16px;
-  background: #0f1418f2;
-  box-shadow: 0 18px 50px #000a;
-}
-.player-next > div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.player-next small {
-  color: #8d97a2;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.player-next strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* "Play" already centred itself because .primary makes it a flex box for its
    icon; "Not now" was left to the browser's default and sat high on Safari. */
-.player-next button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  min-height: 38px;
-  padding: 7px 14px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  color: #d9dde1;
-  cursor: pointer;
-}
-.player-next button.primary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: var(--accent-gradient, var(--accent));
-  color: var(--accent-ink);
-  font-weight: 600;
-}
-.player-next button svg {
-  width: 17px;
-}
 
 /* A panel off the right edge, as it is on the detail page it mirrors. */
-.player-episodes-scrim {
-  position: absolute;
-  z-index: 6;
-  inset: 0;
-  background: #0006;
-  display: flex;
-  justify-content: flex-end;
-}
-.player-episodes {
-  width: min(460px, 100%);
-  display: flex;
-  flex-direction: column;
-  background: var(--episodes-bg);
-  border-left: 1px solid var(--episodes-line);
-  box-shadow: -22px 0 55px #0007;
-  animation: player-episodes-in 0.18s ease-out;
-}
 @keyframes player-episodes-in {
   from {
     transform: translate3d(100%, 0, 0);
@@ -9179,152 +8032,24 @@ body.is-locked {
     transform: translate3d(0, 0, 0);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .player-episodes {
-    animation: none;
-  }
-}
-.player-episodes > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: max(16px, env(safe-area-inset-top)) 16px 10px;
-}
-.player-episodes > header strong {
-  display: block;
-  font-size: 17px;
-}
 /* display:contents on the wrapper means the select is the child that lays
    out, so the spacing belongs to it. Painted as the detail panel's select is,
    rather than the lighter one the page uses inline. */
-.player-episodes .season-select-wrap > span {
-  display: block;
-  margin: 0 16px 5px;
-  color: #85878d;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-}
-.player-episodes select {
-  margin: 0 16px 12px;
-  padding: 11px 34px 11px 13px;
-  border-color: var(--episodes-field-line);
-  background: var(--episodes-field);
-}
 /* Hidden by default because the page's inline list has a heading above it
    already; this panel does not, so here it is the only thing naming the
    season being looked at. */
-.player-episodes > .episode-list-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0 16px 10px;
-}
-.player-episodes > .episode-list-heading strong {
-  font-size: 15px;
-}
-.player-episodes > .episode-list-heading span {
-  color: #777b82;
-  font-size: 10px;
-}
 /* The detail page's own list, so its rows keep their own styling; only the
    scrolling belongs to the panel. */
-.player-episode-list {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  padding: 0 16px max(16px, env(safe-area-inset-bottom));
-  scrollbar-color: #34353a #080809;
-  scrollbar-width: thin;
-}
 /* The tighter rhythm the detail page's panel uses. Phones keep the roomier
    spacing their much taller episode cards were drawn for. */
-@media (min-width: 761px) {
-  .player-episode-list {
-    gap: 5px;
-  }
-}
-
-@media (max-width: 760px) {
-  .player-next {
-    left: max(16px, env(safe-area-inset-left));
-    right: max(16px, env(safe-area-inset-right));
-    bottom: 104px;
-  }
-}
 
 /* Opposite corner to the next-episode card, so the two never collide when an
    episode has both a late intro and early credits. */
-.player-skip {
-  position: absolute;
-  z-index: 4;
-  left: max(24px, env(safe-area-inset-left));
-  bottom: 118px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 42px;
-  padding: 0 18px;
-  border: 1px solid #ffffff26;
-  border-radius: 12px;
-  background: #0f1418f2;
-  color: #fff;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 14px 40px #0009;
-}
-.player-skip:hover {
-  background: #1a2128f2;
-}
-.player-skip svg {
-  width: 17px;
-}
-@media (max-width: 760px) {
-  .player-skip {
-    bottom: 104px;
-    height: 38px;
-    padding: 0 14px;
-    font-size: 13px;
-  }
-}
 
 /* The way out of a stream this browser cannot decode. */
-.player-error-players {
-  display: grid;
-  gap: 7px;
-  margin: 4px 0 2px;
-}
-.player-error-players > small {
-  color: #8d97a2;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.player-error-players > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
 /* Centred explicitly and sized by padding. A button's text is only centred in
    a fixed height by the browser's own default, and Safari does not apply that
    default the way Chromium does — it lays the label against the top. */
-.player-error-players button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 7px 13px;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--panel-soft);
-  color: inherit;
-  cursor: pointer;
-  font-size: 13px;
-}
-.player-error-players button:hover {
-  border-color: #46505b;
-}
 
 /*
  * Downloads.
@@ -10130,5 +8855,1216 @@ body.is-locked {
      but the outgoing page does not animate away. */
   .content.is-switching > :not(.view-switching) {
     transition: none;
+  }
+}
+
+/* ---- Player (ported from the fork's `modified` branch) ---- */
+
+.player-episodes select {
+  background: #1b2025;
+  color: white;
+  border: 1px solid #30373f;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.player-notice {
+  position: absolute;
+  z-index: 5;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100% - 48px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #20262df2;
+  border: 1px solid #3a434d;
+  color: #eef2f4;
+  font-size: 14px;
+  line-height: 1.35;
+  box-shadow: 0 12px 30px #0009;
+}
+.player-notice-dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.player-notice-dismiss:hover {
+  background: #ffffff1f;
+}
+.player-view {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  background: #000;
+  display: grid;
+  place-items: center;
+}
+.player-view video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.player-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: max(20px, env(safe-area-inset-top)) 22px 80px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: linear-gradient(#000d, transparent);
+  pointer-events: none;
+}
+.player-ends-at {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #d9dde1;
+  background: #0b0e1199;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .player-ends-at {
+    font-size: 11px;
+    padding: 5px 9px;
+  }
+}
+.player-top button {
+  pointer-events: auto;
+}
+.player-top strong,
+.player-top small {
+  display: block;
+}
+.player-top small {
+  color: #a5adb6;
+}
+.player-status {
+  position: absolute;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #15191ddd;
+  padding: 12px 16px;
+  border-radius: 12px;
+}
+.player-error {
+  /* Centred on the player rather than left wherever flow put it. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 8;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 26px;
+  background: #171b20f2;
+  border: 1px solid #333b44;
+  border-radius: 18px;
+  text-align: center;
+}
+.player-error p {
+  color: #aab2bb;
+}
+.player-error-message {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #2b333c;
+  border-radius: 10px;
+  background: #0e1216;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.player-error-message:hover { border-color: #46505b; }
+.player-error-hint { color: #6f7883; font-size: 11px; }
+.player-error > div {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.player-error a,
+.player-error button {
+  border: 0;
+  border-radius: 10px;
+  background: #292f36;
+  padding: 10px 12px;
+  display: flex;
+  gap: 7px;
+  text-decoration: none;
+}
+@media (max-width: 760px) {
+  .player-error {
+    margin: 20px;
+  }
+}
+@media (max-width: 760px) {
+  .player-top {
+    padding-left: 14px;
+  }
+}
+@media (max-width: 760px) {
+  .player-top strong {
+    max-width: 240px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+.player-view {
+  display: block;
+  cursor: default;
+  color: #fff;
+  color-scheme: dark;
+  background: #000;
+  isolation: isolate;
+}
+html.native-player-active,
+html.native-player-active body,
+html.native-player-active #root,
+html.native-player-active .app-shell,
+html.native-player-active .player-view.native-player {
+  background: transparent !important;
+}
+html.native-player-active .player-view.native-player.native-player-loading {
+  background: #000 !important;
+}
+.player-view.native-player video,
+.player-view.native-player .player-canvas {
+  display: none !important;
+}
+.app-shell.player-active > :not(.player-view) {
+  display: none !important;
+}
+.player-view video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+@media (max-width: 760px) {
+  .player-view::before {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    inset: 0 0 auto;
+    height: max(env(safe-area-inset-top), 0px);
+    background: #000;
+    pointer-events: none;
+  }
+}
+.player-shade {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.player-shade-top {
+  top: 0;
+  height: 180px;
+  background: linear-gradient(#000d, transparent);
+}
+.player-shade-bottom {
+  bottom: 0;
+  height: 260px;
+  background: linear-gradient(transparent, #000e);
+}
+.player-top {
+  z-index: 3;
+  background: none;
+  transition: opacity 0.2s ease;
+}
+.player-center {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  transform: translate(-50%, -50%);
+  border: 0;
+  background: none;
+  color: #fff;
+  filter: drop-shadow(0 2px 14px #000c);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    opacity 0.2s ease,
+    transform 0.15s ease;
+}
+.player-center:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+}
+.player-center-busy {
+  pointer-events: none;
+}
+.player-center-busy:hover {
+  transform: translate(-50%, -50%);
+}
+.player-center-busy svg {
+  width: 52px;
+  height: 52px;
+}
+.player-center svg {
+  width: 64px;
+  height: 64px;
+}
+.player-brightness {
+  position: relative;
+  display: flex;
+}
+.player-brightness-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #10141aee;
+  box-shadow: 0 8px 24px #0009;
+}
+.player-brightness-panel .volume-slider {
+  width: 150px;
+}
+.player-brightness-reset {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff1a;
+  color: #e9eef2;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.player-brightness-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.player-hud {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 14%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: #10141add;
+  color: #f5f7f8;
+  pointer-events: none;
+  animation: player-hud 1s ease forwards;
+}
+.player-hud svg {
+  width: 20px;
+  height: 20px;
+}
+.player-hud-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.player-hud-detail {
+  color: #8d97a2;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.player-hud-meter {
+  width: 88px;
+  height: 4px;
+  border-radius: 999px;
+  background: #ffffff2e;
+  overflow: hidden;
+}
+.player-hud-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f5f7f8;
+}
+.player-status {
+  z-index: 4;
+  left: 50%;
+  top: calc(50% + 58px);
+  transform: translateX(-50%);
+  font-size: 13px;
+  background: #111820e8;
+}
+.player-controls {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px max(24px, env(safe-area-inset-right))
+    max(22px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  transition: opacity 0.2s ease;
+}
+.player-timeline {
+  display: grid;
+  grid-template-columns: 58px 1fr 58px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #d9dde1;
+}
+.player-timeline span:last-child {
+  text-align: right;
+}
+.player-view input[type="range"] {
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+.player-view input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    #ef3340 0 var(--played, 0%),
+    #ffffff45 var(--played, 0%) 100%
+  );
+}
+.player-view input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 5px #0008;
+}
+.player-view input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 4px;
+  background: #ffffff45;
+}
+.player-view input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 4px;
+  background: #ef3340;
+}
+.player-view input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+.player-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 10px;
+}
+.player-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.player-control-group button {
+  position: relative;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 13px;
+  background: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.player-control-group button:hover,
+.player-control-group button.active {
+  background: #ffffff1f;
+}
+.player-control-group button svg {
+  width: 21px;
+  height: 21px;
+}
+.player-aspect span {
+  font-size: 13px;
+  font-weight: 600;
+}
+@media (max-width: 520px) {
+  .player-aspect span {
+    display: none;
+  }
+}
+.player-control-group .player-play {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #f4f6f7;
+  color: #090b0d;
+}
+.player-control-group .player-play:hover {
+  background: #fff;
+}
+.player-control-group .player-play svg {
+  width: 25px;
+  height: 25px;
+}
+.volume-slider {
+  width: 100px;
+}
+.volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    90deg,
+    #fff 0 var(--played, 100%),
+    #ffffff45 var(--played, 100%) 100%
+  ) !important;
+}
+.audio-picker,
+.external-player-picker {
+  position: relative;
+}
+.external-player-menu {
+  position: absolute;
+  right: 0;
+  bottom: 56px;
+  width: min(330px, calc(100vw - 30px));
+  padding: 14px;
+  background: #101419fa;
+  border: 1px solid #343b43;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px #000b;
+  display: grid;
+  gap: 7px;
+}
+.external-player-menu > strong {
+  padding: 4px 7px 8px;
+}
+.external-player-menu > button {
+  justify-content: flex-start;
+  width: 100%;
+  height: 38px;
+  border-radius: 9px;
+}
+.external-player-menu > button:hover {
+  background: #343b43;
+}
+.controls-hidden {
+  cursor: none;
+}
+.controls-hidden .player-top,
+.controls-hidden .player-controls,
+.controls-hidden .player-center,
+.controls-hidden .player-shade {
+  opacity: 0;
+  pointer-events: none;
+}
+.controls-visible .player-top,
+.controls-visible .player-controls,
+.controls-visible .player-center,
+.controls-visible .player-shade {
+  opacity: 1;
+}
+@media (max-width: 760px) {
+  .player-top {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+}
+@media (max-width: 760px) {
+  .player-top .circle-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (max-width: 760px) {
+  .player-center {
+    width: 62px;
+    height: 62px;
+  }
+}
+@media (max-width: 760px) {
+  .player-controls {
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 760px) {
+  .player-timeline {
+    grid-template-columns: 45px 1fr 45px;
+    gap: 7px;
+    font-size: 10px;
+  }
+}
+@media (max-width: 760px) {
+  .player-control-row {
+    margin-top: 5px;
+  }
+}
+@media (max-width: 760px) {
+  .player-control-group {
+    gap: 5px;
+  }
+}
+@media (max-width: 760px) {
+  .player-control-group button {
+    min-width: 40px;
+    height: 40px;
+    padding: 0 9px;
+  }
+}
+@media (max-width: 760px) {
+  .player-control-group .player-play {
+    width: 48px;
+    height: 48px;
+  }
+}
+@media (max-width: 760px) {
+  .volume-slider {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .audio-picker button span,
+  .external-player-picker button span {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .player-control-right {
+    margin-left: auto;
+  }
+}
+@media (max-width: 760px) {
+  .player-status {
+    max-width: 80vw;
+    text-align: center;
+  }
+}
+.player-warning {
+  position: absolute;
+  z-index: 6;
+  top: max(78px, calc(env(safe-area-inset-top) + 74px));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(620px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid #4c3a22;
+  border-radius: 13px;
+  background: rgba(38, 28, 16, 0.94);
+  color: #f0dcc0;
+  font-size: 13px;
+  line-height: 1.45;
+  transform: translateX(-50%);
+}
+.player-warning a,
+.player-warning .warning-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.player-warning .warning-action {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.player-warning > button {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .player-warning {
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+}
+
+.player-warning .warning-action {
+  min-height: 34px;
+  padding: 8px 13px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.player-warning .warning-action:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.player-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+.player-next {
+  position: absolute;
+  z-index: 4;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: 118px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(460px, calc(100vw - 40px));
+  padding: 13px 15px;
+  border: 1px solid #ffffff1f;
+  border-radius: 16px;
+  background: #0f1418f2;
+  box-shadow: 0 18px 50px #000a;
+}
+.player-next > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.player-next small {
+  color: #8d97a2;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.player-next strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-next button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: #d9dde1;
+  cursor: pointer;
+}
+.player-next button.primary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #f4f6f7;
+  color: #090b0d;
+  font-weight: 600;
+}
+.player-next button svg {
+  width: 17px;
+}
+.player-episodes-scrim {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  background: #0006;
+  display: flex;
+  justify-content: flex-end;
+}
+.player-episodes {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--app-bg);
+  border-left: 1px solid var(--panel-border);
+  animation: player-episodes-in 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-episodes {
+    animation: none;
+  }
+}
+.player-episodes > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(16px, env(safe-area-inset-top)) 16px 10px;
+}
+.player-episodes > header strong {
+  display: block;
+  font-size: 17px;
+}
+.player-episodes select {
+  margin: 0 16px 12px;
+}
+.player-episodes > .episode-list-heading {
+  margin: 0 16px 10px;
+}
+.player-episode-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 760px) {
+  .player-next {
+    left: max(16px, env(safe-area-inset-left));
+    right: max(16px, env(safe-area-inset-right));
+    bottom: 104px;
+  }
+}
+.player-skip {
+  position: absolute;
+  z-index: 4;
+  left: max(24px, env(safe-area-inset-left));
+  bottom: 118px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid #ffffff26;
+  border-radius: 12px;
+  background: #0f1418f2;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 14px 40px #0009;
+}
+.player-skip:hover {
+  background: #1a2128f2;
+}
+.player-skip svg {
+  width: 17px;
+}
+@media (max-width: 760px) {
+  .player-skip {
+    bottom: 104px;
+    height: 38px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+}
+.player-error-players {
+  display: grid;
+  gap: 7px;
+  margin: 4px 0 2px;
+}
+.player-error-players > small {
+  color: #8d97a2;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.player-error-players > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.player-error-players button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.player-error-players button:hover {
+  border-color: #46505b;
+}
+.track-dialog {
+  position: absolute;
+  /* The TV player's geometry: a tall panel anchored to the lower left of the
+     picture, not a menu hanging off the button that opened it. Above both the
+     backdrop and the controls, being a sibling of each. */
+  z-index: 4;
+  left: 44px;
+  bottom: 64px;
+  width: min(724px, calc(100vw - 88px));
+  height: min(72vh, calc(100vh - 128px));
+  padding: 14px;
+  background: #101419fa;
+  border: 1px solid #343b43;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px #000b;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.track-dialog.track-dialog-side {
+  left: auto;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(520px, 92vw);
+  height: 100%;
+  padding: 24px;
+  border: 0;
+  /* Flush to the edge, so only the inner corners are rounded. */
+  border-radius: 16px 0 0 16px;
+  animation: track-drawer-in 220ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .track-dialog.track-dialog-side {
+    animation: none;
+  }
+}
+.track-dialog-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f5f7f8;
+  padding: 0 4px;
+}
+.track-rail {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.track-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.track-item-main {
+  grid-column: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f5f7f8;
+  line-height: 1.16;
+}
+.track-item-sub {
+  grid-column: 1;
+  font-size: 12px;
+  color: #8d97a2;
+  line-height: 1.25;
+}
+.track-item-release {
+  min-width: 0;
+  color: #6c7681;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.track-rail-cards {
+  gap: 8px;
+  padding-right: 4px;
+  /* Rows sized to what is in them and never less. A grid row is otherwise
+     free to be compressed when the rail holds more than fits, and a card
+     squeezed below its content clips it rather than scrolling: with a full
+     list every card collapsed to its title alone and lost both the
+     measurements and the release name. The rail scrolls; the cards do not
+     shrink. */
+  grid-auto-rows: max-content;
+}
+.track-item-card {
+  align-items: start;
+  gap: 5px 12px;
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: #171b21;
+  border-color: #262c33;
+}
+.track-item-card .track-item-sub:not(.track-item-release) {
+  font-size: 12.5px;
+  color: #97a1ac;
+}
+.track-item-card .track-item-release {
+  font-size: 12px;
+  padding-top: 1px;
+}
+.track-item-card:not(.selected):hover {
+  background: #1f242b;
+  border-color: #39424c;
+}
+.track-item:not(.selected):hover {
+  background: #252a30;
+}
+.track-item.selected {
+  background: #eef2f4;
+}
+.track-item.selected .track-item-main {
+  color: #080a0c;
+}
+.track-item.selected .track-item-sub {
+  color: #46505b;
+}
+.track-item.selected .track-item-count {
+  background: #c4cbd2;
+  color: #080a0c;
+}
+.track-dialog small {
+  padding: 2px 5px;
+  color: #8d97a2;
+  font-size: 12px;
+}
+.track-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(90deg, #000000e0 0%, #00000000 100%),
+    linear-gradient(180deg, #00000099 0%, #00000033 60%, #00000000 100%),
+    #00000057;
+}
+.subtitle-screen {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  padding: 90px 56px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  pointer-events: none;
+}
+.subtitle-screen > * {
+  pointer-events: auto;
+}
+.subtitle-screen-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f5f7f8;
+}
+.subtitle-screen-grid {
+  display: grid;
+  /* The middle column takes the slack so the adjustments sit against the right
+     edge. `flex: 1` alone grows the height, not the width - the grid was
+     shrinking to its content and leaving the third rail stranded mid-screen. */
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) 340px;
+  gap: 28px;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+}
+.subtitle-rail {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.subtitle-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.subtitle-language {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: #c4cbd2;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.subtitle-language:hover {
+  background: #ffffff14;
+}
+.subtitle-language.selected {
+  background: #f4f6f7;
+  color: #080a0c;
+}
+.subtitle-option {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 14px 20px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.subtitle-option:hover {
+  background: #ffffff10;
+}
+.subtitle-option.selected {
+  background: #f4f6f7;
+}
+.subtitle-option-source {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: #ffffff1f;
+  color: #e9eef2;
+  font-size: 12px;
+  font-weight: 600;
+}
+.subtitle-option.selected .subtitle-option-source {
+  background: #0000001a;
+  color: #10141a;
+}
+.subtitle-option-language {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f5f7f8;
+  line-height: 1.15;
+}
+.subtitle-option.selected .subtitle-option-language {
+  color: #080a0c;
+}
+.subtitle-option-detail {
+  font-size: 12px;
+  color: #8d97a2;
+  overflow-wrap: anywhere;
+}
+.subtitle-option.selected .subtitle-option-detail {
+  color: #46505b;
+}
+.subtitle-option-check {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  color: #080a0c;
+}
+.subtitle-note {
+  margin: 0;
+  padding: 8px 4px;
+  color: #8d97a2;
+  font-size: 13px;
+  max-width: 42ch;
+}
+.subtitle-style-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px;
+  align-items: center;
+  gap: 14px;
+}
+.subtitle-style-row > button {
+  height: 56px;
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff14;
+  color: #f5f7f8;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.subtitle-style-row > button:hover {
+  background: #ffffff24;
+}
+.subtitle-style-value {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+.subtitle-style-label {
+  font-size: 12px;
+  color: #8d97a2;
+}
+.subtitle-style-reading {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f5f7f8;
+}
+
+@media (max-width: 900px) {
+  .subtitle-screen {
+    padding: 70px 20px 88px;
+  }
+}
+
+@media (max-width: 900px) {
+  .subtitle-screen-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    overflow-y: auto;
+  }
+}
+.subtitle-style-action {
+  min-height: 56px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff14;
+  color: #f5f7f8;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.subtitle-style-action:hover:not(:disabled) {
+  background: #ffffff24;
+}
+.subtitle-style-action:disabled {
+  color: #8d97a2;
+  cursor: default;
+}
+@keyframes player-hud {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes track-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }
