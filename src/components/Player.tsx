@@ -63,6 +63,8 @@ import {
   Maximize,
   Music2,
   CircleGauge,
+  RotateCcw,
+  RotateCw,
   Ratio,
   Layers,
   Pause,
@@ -176,6 +178,8 @@ const ASPECT_MODES: ResizeMode[] = ["Fit", "Fill", "Stretch"];
 
 /** How long the controls and cursor stay up after the last movement while playing. */
 const CONTROLS_HIDE_MS = 2000;
+/** How long a pause sits untouched before it shows what is paused, as Netflix does. */
+const PAUSED_INFO_MS = 5000;
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 const PLAYBACK_RATE_KEY = "nuvio-web-playback-rate";
 function storedPlaybackRate(): number {
@@ -370,6 +374,8 @@ export function Player({
    * element, so a second press restarts the fade rather than continuing the
    * first one's.
    */
+  // Filled in during render, where the skip and next targets are known.
+  const keyActions = useRef<{ skip?: () => void; next?: () => void }>({});
   const [hud, setHud] = useState<
     | { kind: "seek"; amount: number; at: number }
     | { kind: "volume"; level: number; muted: boolean; at: number }
@@ -397,6 +403,11 @@ export function Player({
   useEffect(() => () => window.clearTimeout(hudTimer.current), []);
   const [audioOpen, setAudioOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+  const [pausedInfo, setPausedInfo] = useState(false);
+  const pausedTimer = useRef<number | undefined>(undefined);
+  // Read by the pause timer, which outlives the render that started it.
+  const pausedInfoBlocked = useRef(false);
+  const [seekHover, setSeekHover] = useState<{ time: number; left: number } | null>(null);
   const [playbackRate, setPlaybackRate] = useState(storedPlaybackRate);
   const [subtitleOpen, setSubtitleOpen] = useState(false);
   /** Text tracks on the element, rebuilt whenever the element's list changes. */
@@ -508,6 +519,9 @@ export function Player({
     nonce: number;
   } | null>(null);
   const proxyStartNonce = useRef(0);
+  // A seek on a transcode reloads the source. Paused before it, paused after
+  // it - as Netflix does - rather than the reload starting the film again.
+  const holdPausedRef = useRef(false);
   /**
    * The position a reload is currently fetching, or null when none is.
    *
@@ -748,12 +762,20 @@ export function Player({
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
+    setPausedInfo(false);
     window.clearTimeout(hideTimer.current);
+    window.clearTimeout(pausedTimer.current);
     const running = nativePlayer
       ? playingRef.current
       : engineRef.current
         ? !engineRef.current.paused
         : videoRef.current && !videoRef.current.paused;
+    if (!running)
+      pausedTimer.current = window.setTimeout(() => {
+        if (pausedInfoBlocked.current) return;
+        setPausedInfo(true);
+        setControlsVisible(false);
+      }, PAUSED_INFO_MS);
     if (running)
       hideTimer.current = window.setTimeout(() => {
         setAudioOpen(false);
@@ -783,11 +805,9 @@ export function Player({
     }
   }, [playbackRate]);
   useEffect(() => {
-    if (playing) showControls();
-    else {
-      window.clearTimeout(hideTimer.current);
-      setControlsVisible(true);
-    }
+    // Either way the countdowns restart: hiding while playing, and the paused
+    // screen while paused.
+    showControls();
   }, [playing, showControls]);
   /**
    * Restart the hide timer without summoning the controls.
@@ -910,6 +930,7 @@ export function Player({
         const pending = pendingSeekReloadRef.current;
         if (pending !== null && Math.abs(pending - target) < 2) return;
         pendingSeekReloadRef.current = target;
+        holdPausedRef.current = element.paused && element.played.length > 0;
         // Dragging the bar reports every position it passes over. Settling
         // first means one transcode for the gesture rather than one per step.
         window.clearTimeout(seekReloadTimer.current);
@@ -1540,10 +1561,17 @@ export function Player({
         window.clearInterval(audioWatch);
       }
     }, 1200);
+    const holdPaused = holdPausedRef.current;
+    holdPausedRef.current = false;
+    element.autoplay = !holdPaused;
+    const begin = () => {
+      if (holdPaused) return;
+      element.play().catch(() => setStatus("Tap play to start"));
+    };
     if (isHls && element.canPlayType("application/vnd.apple.mpegurl")) {
       element.src = playbackUrl;
       element.load();
-      element.play().catch(() => setStatus("Tap play to start"));
+      begin();
     } else if (isHls) {
       import("hls.js")
         .then(({ default: HlsClass }) => {
@@ -1584,7 +1612,7 @@ export function Player({
           };
           hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
             syncTracks();
-            element.play().catch(() => setStatus("Tap play to start"));
+            begin();
           });
           hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, syncTracks);
           hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, (_, data) =>
@@ -1598,7 +1626,7 @@ export function Player({
     } else {
       element.src = playbackUrl;
       element.load();
-      element.play().catch(() => setStatus("Tap play to start"));
+      begin();
     }
     return cleanup;
     // Volume is initialized once per source; UI changes update the element directly.
@@ -2279,6 +2307,8 @@ export function Player({
         nudgeVolume.current(event.key === "ArrowUp" ? 0.05 : -0.05);
       }
       else if (event.key.toLowerCase() === "m") muteFromKeyboard.current();
+      else if (event.key.toLowerCase() === "s") keyActions.current.skip?.();
+      else if (event.key.toLowerCase() === "n") keyActions.current.next?.();
       else if (event.key.toLowerCase() === "f") {
         // Ctrl/Cmd+F would otherwise open the browser's find bar over the
         // film, so it is taken here - but only while the player is up.
@@ -2694,6 +2724,42 @@ export function Player({
 
   const seekLimit = duration || 0;
   const displayedTime = seekPreview ?? currentTime;
+  keyActions.current = {
+    skip:
+      skippable && !error
+        ? () => {
+            showControls();
+            void seekTo(skippable.end);
+          }
+        : undefined,
+    next: nextEpisode && !switching ? () => startEpisode(nextEpisode) : undefined,
+  };
+  pausedInfoBlocked.current =
+    !!error ||
+    waiting ||
+    duration <= 0 ||
+    subtitleOpen ||
+    audioOpen ||
+    speedOpen ||
+    sourcesOpen ||
+    episodesOpen ||
+    externalPlayerOpen ||
+    brightnessOpen;
+  // How far ahead of the playhead the element already holds, for the bar.
+  const bufferedTo = (() => {
+    const element = videoRef.current;
+    if (!element || nativePlayer || engineRef.current) return 0;
+    const ranges = element.buffered;
+    for (let index = 0; index < ranges.length; index += 1)
+      if (ranges.start(index) <= currentTime + 0.5 && ranges.end(index) >= currentTime)
+        return ranges.end(index);
+    return 0;
+  })();
+  const seekStep = (amount: number) => {
+    showControls();
+    seekBy(amount);
+    showHud({ kind: "seek", amount });
+  };
   /**
    * `deliberate` marks an interaction that means to seek - releasing the
    * pointer on the bar, or a key. Those commit whatever the input reads, since
@@ -3048,6 +3114,23 @@ export function Player({
           )}
         </div>
       )}
+      {pausedInfo && (
+        <div className="player-paused-info" aria-live="polite">
+          <small>You're watching</small>
+          <strong>{meta.name}</strong>
+          {video && (
+            <span>
+              {video.season != null && video.episode != null
+                ? `Season ${video.season}: Episode ${video.episode} · `
+                : ""}
+              {video.title}
+            </span>
+          )}
+          {(video?.overview || meta.description) && (
+            <p>{video?.overview || meta.description}</p>
+          )}
+        </div>
+      )}
       {speedOpen && (
         <div className="track-dialog">
           <div className="track-dialog-title">Speed</div>
@@ -3070,6 +3153,24 @@ export function Player({
       <div className="player-controls">
         <div className="player-timeline">
           <span>{formatTime(displayedTime)}</span>
+          <div
+            className="player-seek"
+            onPointerMove={(event) => {
+              if (seekLimit <= 0) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const left = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+              setSeekHover({ time: left * seekLimit, left });
+            }}
+            onPointerLeave={() => setSeekHover(null)}
+          >
+          {seekHover && (
+            <span
+              className="player-seek-hover"
+              style={{ "--hover-left": `${seekHover.left * 100}%` } as CSSProperties}
+            >
+              {formatTime(seekHover.time)}
+            </span>
+          )}
           <input
             aria-label="Seek"
             type="range"
@@ -3099,9 +3200,11 @@ export function Player({
             style={
               {
                 "--played": `${seekLimit ? (displayedTime / seekLimit) * 100 : 0}%`,
+                "--buffered": `${seekLimit ? (Math.max(bufferedTo, displayedTime) / seekLimit) * 100 : 0}%`,
               } as CSSProperties
             }
           />
+          </div>
           <span>{formatTime(duration)}</span>
         </div>
         <div className="player-control-row">
@@ -3112,6 +3215,24 @@ export function Player({
               onClick={togglePlayback}
             >
               {playing ? <Pause /> : <Play />}
+            </button>
+            <button
+              className="player-seek-step"
+              aria-label="Back 10 seconds"
+              title="Back 10 seconds (←)"
+              onClick={() => seekStep(-10)}
+            >
+              <RotateCcw />
+              <span>10</span>
+            </button>
+            <button
+              className="player-seek-step"
+              aria-label="Forward 10 seconds"
+              title="Forward 10 seconds (→)"
+              onClick={() => seekStep(10)}
+            >
+              <RotateCw />
+              <span>10</span>
             </button>
             {/* Only where there is one to go to — a film, or the last episode
                 of a season, would leave a button that does nothing. */}
@@ -3369,7 +3490,7 @@ export function Player({
           </div>
           <button onClick={() => setNextDismissed(true)}>Not now</button>
           <button
-            className="primary"
+            className={`primary${nextCountdown != null ? " is-counting" : ""}`}
             disabled={switching}
             onClick={() => startEpisode(nextEpisode)}
           >
