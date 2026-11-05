@@ -13,6 +13,7 @@
  */
 
 import { mediaProxyBase } from "./mediaProxy.ts";
+import { fetchProxyTracks } from "./proxyTracks.ts";
 import { partitionHashes, rememberHashes } from "./cachedHashes.ts";
 import { providerCredential } from "./providerCredentials.ts";
 import type { ProviderCredentialRow } from "./providerCredentials.ts";
@@ -75,10 +76,39 @@ const MESSAGES: Record<string, string> = {
  * Resolves one torrent stream to a direct URL. Throws with a message worth
  * showing; an uncached torrent is an ordinary outcome, not a fault.
  */
-export async function resolveDebridStream(
+/**
+ * Links resolved in this tab, so a click on a source the sheet already
+ * prepared - or is preparing - plays without another round trip. Kept well
+ * under the proxy's own 20-minute cache, as a debrid link expires.
+ */
+const RESOLVED_MS = 10 * 60 * 1000;
+const resolved = new Map<string, { at: number; url: Promise<string> }>();
+
+export function resolveDebridStream(
   stream: Stream,
   rows: ProviderCredentialRow[],
-  { season, episode }: { season?: number; episode?: number } = {},
+  where: { season?: number; episode?: number } = {},
+): Promise<string> {
+  const key = [torboxApiKey(rows), magnetFromStream(stream), stream.behaviorHints?.filename ?? "", where.season, where.episode].join("|");
+  const entry = resolved.get(key);
+  if (entry && Date.now() - entry.at < RESOLVED_MS) return entry.url;
+  const url = requestResolve(stream, rows, where).then((link) => {
+    // Sign it and have the proxy read the file now, while the player is still
+    // mounting: both are otherwise paid after the click, one after the other.
+    void fetchProxyTracks(link).catch(() => {});
+    return link;
+  });
+  url.catch(() => {
+    if (resolved.get(key)?.url === url) resolved.delete(key);
+  });
+  resolved.set(key, { at: Date.now(), url });
+  return url;
+}
+
+async function requestResolve(
+  stream: Stream,
+  rows: ProviderCredentialRow[],
+  { season, episode }: { season?: number; episode?: number },
 ): Promise<string> {
   const base = mediaProxyBase();
   const apiKey = torboxApiKey(rows);

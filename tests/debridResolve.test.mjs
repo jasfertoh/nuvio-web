@@ -4,6 +4,7 @@ import {
   canResolveDebrid,
   magnetFromStream,
   needsDebridResolve,
+  resolveDebridStream,
   torboxApiKey,
 } from "../src/lib/debridResolve.ts";
 import { setMediaProxyBase } from "../src/lib/mediaProxy.ts";
@@ -71,4 +72,28 @@ test("resolving needs both a proxy and a key", () => {
 
   store.clear();
   assert.equal(canResolveDebrid(KEYED), false);
+});
+
+// The sheet prepares the top sources in the background; a click on one of
+// them must reuse that answer rather than ask Torbox again.
+test("a stream resolved once is not asked about again", async () => {
+  setMediaProxyBase("https://backend.example.com");
+  const asked = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    asked.push(String(url));
+    return new Response(JSON.stringify({ url: "https://cdn.example.com/a.mkv" }), { status: 200 });
+  };
+  try {
+    const stream = { name: "x", infoHash: HASH };
+    const [first, second] = await Promise.all([
+      resolveDebridStream(stream, KEYED, { season: 1, episode: 2 }),
+      resolveDebridStream(stream, KEYED, { season: 1, episode: 2 }),
+    ]);
+    assert.equal(first, "https://cdn.example.com/a.mkv");
+    assert.equal(second, first);
+    assert.equal(asked.filter((url) => url.endsWith("/debrid/resolve")).length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
