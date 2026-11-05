@@ -121,6 +121,13 @@ function playbackCapabilities(): string[] {
  * safe to call more than once on the same source.
  */
 export type ProxyPlaybackOptions = {
+  /**
+   * Have the proxy repackage a source that needs no converting as fragmented
+   * MP4, for the Media Source path, rather than relay the file as it is. A
+   * relayed MKV is left to the browser's own Matroska support, which on some
+   * devices presents frames unevenly.
+   */
+  remux?: boolean;
   /** Which audio track the proxy should carry, by ordinal. */
   audioOrdinal?: number | null;
   /** Where the stream should begin, for sources the element cannot seek. */
@@ -138,7 +145,7 @@ export type ProxyPlaybackOptions = {
 
 export function proxiedPlaybackUrl(
   url: string,
-  { audioOrdinal, startSeconds, reencode }: ProxyPlaybackOptions = {},
+  { audioOrdinal, startSeconds, reencode, remux }: ProxyPlaybackOptions = {},
 ): string {
   const base = mediaProxyBase();
   if (!base || !isProxyableSource(url) || url.includes("/media-transcode/")) {
@@ -159,6 +166,7 @@ export function proxiedPlaybackUrl(
     // proxy's read pacing on transcodes; a pass-through ignores it entirely.
     "&copyts=1" +
     (reencode ? "&reencode=1" : "") +
+    (remux ? "&remux=1" : "") +
     `&caps=${playbackCapabilities().join(",")}` +
     // Empty until one has been minted for this source, which is what the
     // proxy's log-only mode is for: an unsigned request is still served, and

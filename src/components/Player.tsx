@@ -1787,6 +1787,7 @@ export function Player({
             audioOrdinal: proxyAudioOrdinal,
             startSeconds: seconds,
             reencode: reencodeFor === url,
+            remux: true,
           }),
         {
           onFallback: () => {
